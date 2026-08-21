@@ -1,0 +1,12 @@
+# SHA-256	filename	upstream source URL
+7a92faa25129e8bbec5e50eeb9214f187665428c31b05c4ef6e36c58c0b1c6d2	pymupdf-1.27.2.3.tar.gz	https://files.pythonhosted.org/packages/22/32/708bedc9dde7b328d45abbc076091769d44f2f24ad151ad92d56a6ec142b/pymupdf-1.27.2.3.tar.gz
+553867b135303dc4c25ab67c5f234d8e900a0e36e66e8484d99adc05fe1e8737	mupdf-1.27.2-source.tar.gz	https://casper.mupdf.com/downloads/archive/mupdf-1.27.2-source.tar.gz
+a12a0a013a30b846c786c010f2c19dd36b7298d888f7c4bd1581d90ce18b5e58	Python-3.11.5.tgz	https://www.python.org/ftp/python/3.11.5/Python-3.11.5.tgz
+1761d4f5b13a1028b9b6f3d4b8e17feb0cedc9370f6afe61d7193d2cdce83323	openssl-3.0.10.tar.gz	https://github.com/openssl/openssl/releases/download/openssl-3.0.10/openssl-3.0.10.tar.gz
+cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050	openpyxl-3.1.5.tar.gz	https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz
+dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54	et_xmlfile-2.0.0.tar.gz	https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz
+89b65a3ad07d9dd5832253e37bc45f31872d10d7f9d5c9fd0fdd6088a83829dd	pyinstaller-6.22.2.tar.gz	https://files.pythonhosted.org/packages/cc/2b/836d9def811c02522e0921d8b8cdf0c16b0545a216e97e71041758057859/pyinstaller-6.22.2.tar.gz
+c87b395dd12fabde9c99573a9749d67da8d29ef9de0125c7f536699b4a9bc9e7	altgraph-0.17.5.tar.gz	https://files.pythonhosted.org/packages/7e/f8/97fdf103f38fed6792a1601dbc16cc8aac56e7459a9fff08c812d8ae177a/altgraph-0.17.5.tar.gz
+f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362	macholib-1.16.4.tar.gz	https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz
+94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79	packaging-26.3.tar.gz	https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz
+bef5002c32f4f50bd55b005da12cff64eca8783e7eaf86a06a62410164bab725	pyinstaller_hooks_contrib-2026.6.tar.gz	https://files.pythonhosted.org/packages/94/5b/c9fe0db5e83ee1c39b2258fa21d23b15e1a60786b6c5990ee5074ead8bb6/pyinstaller_hooks_contrib-2026.6.tar.gz

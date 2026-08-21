@@ -1,0 +1,44 @@
+# Explicit corresponding-source allowlist. Keep this list free of private test
+# scripts, generated PDFs, credentials, caches, and Xcode user data.
+.gitignore
+LICENSE
+LICENSING.md
+THIRD_PARTY_NOTICES.md
+SOURCE.md
+CONTRIBUTING.md
+README.md
+BETA_TESTING.md
+BETA_FEEDBACK_TEMPLATE.md
+PRIVACY.md
+RELEASE_NOTES.md
+DCA Script Marker — DCA State Template.xlsx
+dca_script_marker.py
+requirements.txt
+macOS App/DCA Script Marker/DCA Script Marker.xcodeproj/project.pbxproj
+macOS App/DCA Script Marker/DCA Script Marker.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+macOS App/DCA Script Marker/DCA Script Marker/ContentView.swift
+macOS App/DCA Script Marker/DCA Script Marker/DCA_Script_MarkerApp.swift
+macOS App/DCA Script Marker/DCA Script Marker/OCRService.swift
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/Contents.json
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/AccentColor.colorset/Contents.json
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/AppIcon.appiconset/Contents.json
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/AppIcon.appiconset/DCA-Script-Marker-AppIcon-1024.png
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/DCAAppLogo.imageset/Contents.json
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/DCAAppLogo.imageset/DCAAppLogo.png
+macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/DCAAppLogo.imageset/DCAAppLogo@2x.png
+tests/test_canonical_template.py
+tests/test_cli_styles.py
+tests/test_matching.py
+tests/test_output_replacement.py
+tests/test_pdf_annotations.py
+tests/test_release_packaging.py
+tests/test_runtime_cli.py
+packaging/macos/README.md
+packaging/macos/build-requirements.txt
+packaging/macos/build_engines.sh
+packaging/macos/build_private_beta.sh
+packaging/macos/build_source_archive.sh
+packaging/macos/sanitize_template.sh
+packaging/macos/source-dependencies.tsv
+packaging/macos/source-files.txt
+packaging/macos/verify_beta_app.sh
