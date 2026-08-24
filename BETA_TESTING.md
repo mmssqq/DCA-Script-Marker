@@ -1,12 +1,17 @@
-# DCA Script Marker private beta
+# DCA Script Marker public beta
 
 Thank you for testing DCA Script Marker. This beta is intended for rehearsal
 preparation and must still be checked by a human before it is used in a show.
+The complete workflow is available in the bilingual
+[User Guide / 使用手册](USER_GUIDE.md).
 
 ## Supported Macs
 
 - Apple Silicon and Intel Macs
-- macOS 13 Ventura or later
+- Beta 2 targets macOS 12 Monterey or later. Its notarized DMG passed physical
+  installation, launch, marked-PDF generation, and review-report generation on
+  Intel macOS 12.7.6. Apple Silicon Monterey 12.x remains unverified. The
+  published beta 1 requires macOS 13 Ventura or later.
 - Text-based script PDFs with selectable text
 - DCA State workbooks in the supplied horizontal format or the supported
   legacy vertical format
@@ -22,12 +27,14 @@ script; keep the original PDF and workbook unchanged.
 3. Open the app from Applications.
 4. Confirm that **About DCA Script Marker** shows the expected beta version.
 
-The shareable beta will be signed and notarized by Apple. If macOS says the app
+This beta is signed and notarized by Apple. If macOS says the app
 cannot be verified, stop and report the exact message rather than bypassing the
 warning.
 
-The DMG also contains the GNU AGPL licence, third-party notices, and the exact
-matching source archive. Keep these files together when sharing the beta.
+The DMG contains the GNU AGPL licence and third-party notices. The exact
+matching source ZIP is supplied beside the DMG as a separate release file.
+Keep the DMG, source ZIP, release manifest, and checksums together when sharing
+the beta.
 
 ## Suggested test
 
@@ -71,6 +78,6 @@ Please include:
 Crashes, damaged output, loss of an existing file, or an app that cannot launch
 are release-blocking issues and should be reported immediately.
 
-During the private beta, please send feedback rather than code or pull
-requests. A contributor policy will be added before outside code contributions
-are accepted.
+During the public beta, please send feedback rather than code or pull requests.
+Users may fork and modify the AGPL source now; upstream pull requests are
+temporarily paused while a long-term contributor-licensing policy is prepared.

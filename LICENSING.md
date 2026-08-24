@@ -29,8 +29,9 @@ created for that build. See [SOURCE.md](SOURCE.md). Third-party components keep
 their own copyright notices and licence terms; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Contributions during private beta
+## Contributions during public beta
 
 Bug reports and testing feedback are welcome. Code contributions are not yet
-being accepted during the private beta while a contributor-licensing policy is
-prepared. See [CONTRIBUTING.md](CONTRIBUTING.md).
+being accepted during the public beta while a contributor-licensing policy is
+prepared. Users remain free to fork and modify the AGPL source. See
+[CONTRIBUTING.md](CONTRIBUTING.md).

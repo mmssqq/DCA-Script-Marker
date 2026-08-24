@@ -1,4 +1,4 @@
-# macOS private beta packaging
+# macOS beta packaging
 
 The beta is one Universal macOS app. Its Swift interface contains both Intel
 and Apple Silicon code. Internally it contains one self-contained marker engine
@@ -22,7 +22,7 @@ The app, helper engines, package filename, and checksum all use the same beta
 version and build number. Override them with `DCA_VERSION` and
 `DCA_BUILD_NUMBER` when preparing a later beta.
 
-## Shareable private beta
+## Shareable beta
 
 In Xcode, open **Settings → Accounts**, select the paid team, choose
 **Manage Certificates**, and add a `Developer ID Application` certificate.
@@ -50,7 +50,7 @@ nested code, verifies portability, creates a DMG, submits it for notarization,
 and staples the accepted ticket. It then runs a Gatekeeper assessment and
 creates basename-only SHA-256 checksums.
 
-The DMG includes the app, the finalized bilingual DCA State template, private
+The DMG includes the app, the finalized bilingual DCA State template, public
 beta instructions, privacy information, release notes, feedback template, and
 licence files. The exact matching corresponding-source ZIP is published beside
 the DMG as a separate GitHub Release asset. Keeping it outside the DMG prevents
@@ -76,4 +76,9 @@ The finalized template is never edited in place. The release workflow removes
 only Excel's optional developer-machine absolute-path metadata from its staged
 copy; workbook content and formatting remain unchanged.
 
-The initial private beta supports macOS 13 Ventura or later.
+Beta 2 targets macOS 12 Monterey or later. Its notarized DMG has passed physical
+installation, launch, marked-PDF generation, and review-report generation on
+Intel macOS 12.7.6; Apple Silicon Monterey 12.x remains unverified. Override
+the deployment target only for compatibility experiments with
+`DCA_MINIMUM_MACOS`; a release must still pass the bundled metadata and Mach-O
+minimum-version checks.

@@ -5,6 +5,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
+import fitz
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGING_ROOT = PROJECT_ROOT / "packaging" / "macos"
@@ -12,6 +14,113 @@ TEMPLATE_NAME = "DCA Script Marker — DCA State Template.xlsx"
 
 
 class ReleasePackagingTests(unittest.TestCase):
+    def test_monterey_deployment_target_is_consistent(self):
+        project = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "DCA Script Marker.xcodeproj"
+            / "project.pbxproj"
+        ).read_text(encoding="utf-8")
+        content_view = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "DCA Script Marker"
+            / "ContentView.swift"
+        ).read_text(encoding="utf-8")
+        app_builder = (PACKAGING_ROOT / "build_private_beta.sh").read_text(
+            encoding="utf-8"
+        )
+        engine_builder = (PACKAGING_ROOT / "build_engines.sh").read_text(
+            encoding="utf-8"
+        )
+        source_builder = (PACKAGING_ROOT / "build_source_archive.sh").read_text(
+            encoding="utf-8"
+        )
+        verifier = (PACKAGING_ROOT / "verify_beta_app.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(project.count("MACOSX_DEPLOYMENT_TARGET = 12.0;"), 2)
+        self.assertNotIn("MACOSX_DEPLOYMENT_TARGET = 13.0;", project)
+        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 2;"), 2)
+        self.assertNotIn("path(percentEncoded: false)", content_view)
+
+        for build_script in (app_builder, engine_builder):
+            self.assertIn('DCA_MINIMUM_MACOS:-12.0', build_script)
+
+        for build_script in (app_builder, engine_builder, source_builder):
+            self.assertIn('DCA_BUILD_NUMBER:-2', build_script)
+        self.assertIn(
+            'MACOSX_DEPLOYMENT_TARGET="$MINIMUM_MACOS_VERSION"', app_builder
+        )
+        self.assertIn(
+            "printf 'Minimum macOS: %s\\n' \"$MINIMUM_MACOS_VERSION\"",
+            app_builder,
+        )
+        self.assertIn(
+            'LSMinimumSystemVersion -string "$MINIMUM_MACOS_VERSION"',
+            engine_builder,
+        )
+        self.assertIn('DCA_MINIMUM_MACOS:-12.0', verifier)
+        self.assertIn("LC_BUILD_VERSION", verifier)
+        self.assertIn("LC_VERSION_MIN_MACOSX", verifier)
+
+    def test_bilingual_user_guide_is_packaged(self):
+        build_script = (PACKAGING_ROOT / "build_private_beta.sh").read_text(
+            encoding="utf-8"
+        )
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (PROJECT_ROOT / "USER_GUIDE.md").read_text(encoding="utf-8")
+        guide_pdf = (
+            PROJECT_ROOT
+            / "output"
+            / "pdf"
+            / "START HERE - User Guide - 使用手册.pdf"
+        )
+
+        self.assertIn("USER_GUIDE.md", build_script)
+        self.assertIn("START HERE - User Guide - 使用手册.pdf", build_script)
+        self.assertIn("Install and quick start / 安装与快速开始", readme)
+        self.assertIn("Character List", guide)
+        self.assertIn("Start Line Text", guide)
+        self.assertIn("中文使用手册", guide)
+        self.assertIn("故障排查与问题反馈", guide)
+        self.assertTrue(guide_pdf.is_file())
+
+        with fitz.open(guide_pdf) as document:
+            self.assertGreaterEqual(document.page_count, 2)
+            pdf_text = "\n".join(page.get_text() for page in document)
+
+        self.assertIn("Install the app and copy the template", pdf_text)
+        self.assertIn("安装软件并复制模板", pdf_text)
+
+    def test_macos_version_comparison_executes(self):
+        verifier = PACKAGING_ROOT / "verify_beta_app.sh"
+        cases = (
+            ("13.0", "12.0", 0),
+            ("12.1", "12.0", 0),
+            ("12.0", "12.0", 1),
+            ("11.6.9", "12.0", 1),
+            ("invalid", "12.0", 2),
+        )
+
+        for candidate, maximum, expected_status in cases:
+            with self.subTest(candidate=candidate, maximum=maximum):
+                result = subprocess.run(
+                    [
+                        str(verifier),
+                        "--version-is-greater",
+                        candidate,
+                        maximum,
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, expected_status)
+
     def test_source_archive_is_published_beside_not_inside_installer(self):
         build_script = (PACKAGING_ROOT / "build_private_beta.sh").read_text(
             encoding="utf-8"
@@ -25,6 +134,10 @@ class ReleasePackagingTests(unittest.TestCase):
         )
         self.assertIn(
             'echo "Matching source archive: $SOURCE_ARCHIVE"', build_script
+        )
+        self.assertIn(
+            '[[ -e "$PACKAGE_ROOT/$(basename "$SOURCE_ARCHIVE")" ]]',
+            build_script,
         )
 
     def test_source_allowlist_is_complete_and_private_data_free(self):

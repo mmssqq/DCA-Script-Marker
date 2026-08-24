@@ -8,7 +8,8 @@ REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DESTINATION="${1:-}"
 PYTHON_BIN="${DCA_BUILD_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11}"
 APP_VERSION="${DCA_VERSION:-0.9.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-1}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-2}"
+MINIMUM_MACOS_VERSION="${DCA_MINIMUM_MACOS:-12.0}"
 
 if [[ -z "$DESTINATION" ]]; then
     echo "Usage: $0 <engine-output-directory>" >&2
@@ -102,7 +103,7 @@ build_engine() {
         "$bundle_root/Contents/Info.plist"
     plutil -replace LSBackgroundOnly -bool true \
         "$bundle_root/Contents/Info.plist"
-    plutil -replace LSMinimumSystemVersion -string "13.0" \
+    plutil -replace LSMinimumSystemVersion -string "$MINIMUM_MACOS_VERSION" \
         "$bundle_root/Contents/Info.plist"
 }
 

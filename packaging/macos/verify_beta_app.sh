@@ -3,6 +3,54 @@
 set -euo pipefail
 
 APP_PATH="${1:-}"
+MINIMUM_MACOS_VERSION="${DCA_MINIMUM_MACOS:-12.0}"
+
+version_is_greater() {
+    local candidate="$1"
+    local maximum="$2"
+    local candidate_major candidate_minor candidate_patch
+    local maximum_major maximum_minor maximum_patch
+
+    IFS=. read -r candidate_major candidate_minor candidate_patch \
+        <<< "$candidate"
+    IFS=. read -r maximum_major maximum_minor maximum_patch \
+        <<< "$maximum"
+    candidate_minor="${candidate_minor:-0}"
+    candidate_patch="${candidate_patch:-0}"
+    maximum_minor="${maximum_minor:-0}"
+    maximum_patch="${maximum_patch:-0}"
+
+    if [[ ! "$candidate_major" =~ ^[0-9]+$ \
+        || ! "$candidate_minor" =~ ^[0-9]+$ \
+        || ! "$candidate_patch" =~ ^[0-9]+$ \
+        || ! "$maximum_major" =~ ^[0-9]+$ \
+        || ! "$maximum_minor" =~ ^[0-9]+$ \
+        || ! "$maximum_patch" =~ ^[0-9]+$ ]]; then
+        return 2
+    fi
+
+    if (( candidate_major != maximum_major )); then
+        (( candidate_major > maximum_major ))
+        return
+    fi
+    if (( candidate_minor != maximum_minor )); then
+        (( candidate_minor > maximum_minor ))
+        return
+    fi
+    (( candidate_patch > maximum_patch ))
+}
+
+if [[ "$APP_PATH" == "--version-is-greater" ]]; then
+    if [[ $# -ne 3 ]]; then
+        echo "Usage: $0 --version-is-greater <candidate> <maximum>" >&2
+        exit 2
+    fi
+    if version_is_greater "$2" "$3"; then
+        exit 0
+    else
+        exit $?
+    fi
+fi
 
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
     echo "Usage: $0 <DCA Script Marker.app>" >&2
@@ -17,6 +65,65 @@ INTEL_ENGINE_APP="$APP_PATH/Contents/Helpers/DCAEngine-x86_64.app"
 ARM_ENGINE="$ARM_ENGINE_APP/Contents/MacOS/DCAEngine"
 INTEL_ENGINE="$INTEL_ENGINE_APP/Contents/MacOS/DCAEngine"
 LICENSE_ROOT="$APP_PATH/Contents/Resources/Licenses"
+
+for bundle_path in "$APP_PATH" "$ARM_ENGINE_APP" "$INTEL_ENGINE_APP"; do
+    bundle_minimum="$({
+        plutil -extract LSMinimumSystemVersion raw -o - \
+            "$bundle_path/Contents/Info.plist"
+    } 2>/dev/null || true)"
+    if [[ "$bundle_minimum" != "$MINIMUM_MACOS_VERSION" ]]; then
+        echo "A bundle has the wrong minimum macOS version: $bundle_path ($bundle_minimum)" >&2
+        exit 1
+    fi
+done
+
+while IFS= read -r -d '' candidate; do
+    if ! file "$candidate" | grep -q 'Mach-O'; then
+        continue
+    fi
+
+    minimum_versions="$(
+        otool -l "$candidate" | awk '
+            $1 == "cmd" && $2 == "LC_BUILD_VERSION" {
+                command_type = "build"
+                next
+            }
+            $1 == "cmd" && $2 == "LC_VERSION_MIN_MACOSX" {
+                command_type = "legacy"
+                next
+            }
+            command_type == "build" && $1 == "minos" {
+                print $2
+                command_type = ""
+            }
+            command_type == "legacy" && $1 == "version" {
+                print $2
+                command_type = ""
+            }
+        '
+    )"
+    if [[ -z "$minimum_versions" ]]; then
+        echo "Could not read the minimum macOS version from: $candidate" >&2
+        exit 1
+    fi
+
+    while IFS= read -r binary_minimum; do
+        comparison_status=0
+        if version_is_greater "$binary_minimum" "$MINIMUM_MACOS_VERSION"; then
+            comparison_status=0
+        else
+            comparison_status=$?
+        fi
+        if [[ "$comparison_status" -eq 0 ]]; then
+            echo "A bundled binary requires macOS $binary_minimum: $candidate" >&2
+            exit 1
+        fi
+        if [[ "$comparison_status" -ne 1 ]]; then
+            echo "Could not compare macOS version $binary_minimum for: $candidate" >&2
+            exit 1
+        fi
+    done <<< "$minimum_versions"
+done < <(find "$APP_PATH" -type f -print0)
 
 for license_file in LICENSE LICENSING.md THIRD_PARTY_NOTICES.md SOURCE.md; do
     if [[ ! -s "$LICENSE_ROOT/$license_file" ]]; then

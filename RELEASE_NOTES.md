@@ -1,9 +1,35 @@
 # Release notes
 
-## 0.9.0 beta 1 — preparation build
+## 0.9.0 beta 2 — Monterey compatibility candidate
 
-This build is being prepared for a small friends-and-colleagues beta. It is not
-yet approved for distribution.
+This build extends the public pre-release beta to macOS 12 Monterey. The
+notarized DMG has passed physical installation, launch, marked-PDF generation,
+and review-report generation on Intel macOS 12.7.6. Apple Silicon Monterey
+12.x remains unverified, so this release should remain clearly labelled as a
+pre-release.
+
+### Changes since beta 1
+
+- Targets macOS 12 Monterey or later on Apple Silicon and 64-bit Intel Macs;
+  physical Intel Monterey 12.7.6 validation has passed
+- Replaces a macOS 13-only file-path API in the Swift interface
+- Aligns the host app, both embedded engines, package manifest, and verification
+  checks to the same macOS 12 minimum
+- Adds a packaging test that rejects a bundle or Mach-O binary requiring a
+  system newer than the declared minimum
+
+### Compatibility verification
+
+- Completed: installed and launched the notarized DMG on the Intel macOS
+  12.7.6 test Mac
+- Completed: generated and reviewed a marked PDF and review report on that Mac
+- Test on Apple Silicon running Monterey 12.x, using hardware or a suitable VM;
+  until then, Apple Silicon Monterey compatibility remains unverified
+
+## 0.9.0 beta 1 — public pre-release
+
+This build was published as the first GitHub pre-release. It requires macOS 13
+Ventura or later.
 
 ### Highlights
 
@@ -19,26 +45,27 @@ yet approved for distribution.
 
 ### Verification completed
 
-- 24 automated engine, template, and release-packaging tests pass
+- 25 automated engine, template, and release-packaging tests pass
 - Universal Swift Release build succeeds
 - Apple Silicon and Intel frozen engines start without external dependencies
 - Both frozen engines produced matching review results in a real-script smoke
   test
-- Hardened-runtime nested-signing layout was rehearsed with one Team ID
+- The Universal app and both embedded engines are signed with Developer ID and
+  Hardened Runtime under one Team ID
+- The DMG is accepted by Apple's notarization service, stapled, Gatekeeper
+  checked, and checksum verified
 
-### Required before testers receive it
+### Validation still requested
 
-- Install a Developer ID Application certificate
-- Create and validate a `notarytool` Keychain profile
-- Produce, notarize, staple, and Gatekeeper-check the DMG
 - Test the notarized download on a physical Intel Mac and a clean Apple Silicon
   Mac
 
 ### Distribution and source
 
 - The bundled beta is licensed under GNU AGPL version 3 or later
-- Each binary package includes the finalized template, licence and third-party
-  notices, and the exact matching source archive
+- The DMG includes the finalized template, licence, and third-party notices
+- The exact matching source ZIP is supplied beside the DMG as a separate
+  release file
 - Dependency source archives are identified by locked SHA-256 checksums
 - No theatre script PDFs or private test materials are included
 

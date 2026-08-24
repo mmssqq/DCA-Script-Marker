@@ -11,6 +11,8 @@ BETA_TESTING.md
 BETA_FEEDBACK_TEMPLATE.md
 PRIVACY.md
 RELEASE_NOTES.md
+USER_GUIDE.md
+output/pdf/START HERE - User Guide - 使用手册.pdf
 DCA Script Marker — DCA State Template.xlsx
 dca_script_marker.py
 requirements.txt

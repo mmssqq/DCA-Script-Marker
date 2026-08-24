@@ -59,7 +59,7 @@ struct ContentView: View {
             ZStack {
                 HStack {
                     Spacer()
-                    
+
 
                     Button {
                         showHelp = true
@@ -288,7 +288,7 @@ struct ContentView: View {
         }
 
         return panel.runModal() == .OK
-            ? panel.url?.path(percentEncoded: false) ?? ""
+            ? panel.url?.path ?? ""
             : ""
     }
 
@@ -299,7 +299,7 @@ struct ContentView: View {
         panel.canChooseDirectories = true
 
         return panel.runModal() == .OK
-            ? panel.url?.path(percentEncoded: false) ?? ""
+            ? panel.url?.path ?? ""
             : ""
     }
 
@@ -841,7 +841,7 @@ struct HelpSheet: View {
                     HelpStep(
                         number: "1",
                         title: "Complete the DCA State template / 完成 DCA 状态表",
-                        detail: "Enter each DCA State, its start cue, start position, page hint, and the names assigned to each DCA.\n填写每个 DCA 状态、起始提示文字、开始位置、页码提示，以及每个 DCA 对应的角色名称。"
+                        detail: "Copy the included Excel template from the DMG into your project folder. Add every dialogue character to Character List, then enter each state, start cue, start position, page hint, and DCA assignment in DCA States. Save the completed copy before choosing it in the app.\n先把 DMG 内附带的 Excel 模板复制到项目文件夹。在 Character List 填写所有对白角色，再在 DCA States 填写状态、起始提示、开始位置、页码提示和 DCA 分配。保存完成的副本后再在软件中选择。"
                     )
                     HelpStep(
                         number: "2",

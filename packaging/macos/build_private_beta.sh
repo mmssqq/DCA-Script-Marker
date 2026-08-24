@@ -6,7 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SCHEME="DCA Script Marker"
 APP_VERSION="${DCA_VERSION:-0.9.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-1}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-2}"
+MINIMUM_MACOS_VERSION="${DCA_MINIMUM_MACOS:-12.0}"
 BUILD_OUTPUT_ROOT="$REPOSITORY_ROOT/build"
 mkdir -p "$BUILD_OUTPUT_ROOT"
 RUN_ROOT="$(mktemp -d "$BUILD_OUTPUT_ROOT/private-beta.XXXXXX")"
@@ -40,7 +41,9 @@ for release_file in \
     LICENSING.md \
     THIRD_PARTY_NOTICES.md \
     SOURCE.md \
-    CONTRIBUTING.md; do
+    CONTRIBUTING.md \
+    USER_GUIDE.md \
+    "output/pdf/START HERE - User Guide - 使用手册.pdf"; do
     if [[ ! -s "$REPOSITORY_ROOT/$release_file" ]]; then
         echo "A required release file is missing: $release_file" >&2
         exit 1
@@ -87,6 +90,7 @@ if [[ ! -d "$SOURCE_REPOSITORY_ROOT" ]]; then
 fi
 
 DCA_VERSION="$APP_VERSION" DCA_BUILD_NUMBER="$BUILD_NUMBER" \
+    DCA_MINIMUM_MACOS="$MINIMUM_MACOS_VERSION" \
     "$SOURCE_REPOSITORY_ROOT/packaging/macos/build_engines.sh" "$ENGINE_OUTPUT"
 
 xcodebuild \
@@ -98,7 +102,7 @@ xcodebuild \
     -derivedDataPath "$DERIVED_DATA" \
     ARCHS="arm64 x86_64" \
     ONLY_ACTIVE_ARCH=NO \
-    MACOSX_DEPLOYMENT_TARGET=13.0 \
+    MACOSX_DEPLOYMENT_TARGET="$MINIMUM_MACOS_VERSION" \
     MARKETING_VERSION="$APP_VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     CODE_SIGNING_ALLOWED=NO \
@@ -126,6 +130,10 @@ ditto "$SOURCE_REPOSITORY_ROOT/THIRD_PARTY_LICENSES" \
     "$PACKAGE_ROOT/THIRD_PARTY_LICENSES"
 ditto "$SOURCE_REPOSITORY_ROOT/SOURCE.md" "$PACKAGE_ROOT/SOURCE.md"
 ditto "$SOURCE_REPOSITORY_ROOT/CONTRIBUTING.md" "$PACKAGE_ROOT/CONTRIBUTING.md"
+ditto "$SOURCE_REPOSITORY_ROOT/USER_GUIDE.md" "$PACKAGE_ROOT/USER_GUIDE.md"
+ditto \
+    "$SOURCE_REPOSITORY_ROOT/output/pdf/START HERE - User Guide - 使用手册.pdf" \
+    "$PACKAGE_ROOT/START HERE - User Guide - 使用手册.pdf"
 # Keep the corresponding-source archive beside the installer as a separate
 # release asset. Apple recursively notarizes archives found inside a DMG; the
 # upstream PyInstaller source tarball intentionally contains unsigned bootloader
@@ -257,9 +265,14 @@ else
     sign_for_distribution "$APP_PATH"
     verify_distribution_signatures
 fi
-"$SCRIPT_DIR/verify_beta_app.sh" "$APP_PATH"
+DCA_MINIMUM_MACOS="$MINIMUM_MACOS_VERSION" \
+    "$SCRIPT_DIR/verify_beta_app.sh" "$APP_PATH"
 
 GIT_COMMIT="$(git -C "$REPOSITORY_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+SOURCE_PROVENANCE="commit $GIT_COMMIT"
+if [[ -n "$(git -C "$REPOSITORY_ROOT" status --porcelain 2>/dev/null || true)" ]]; then
+    SOURCE_PROVENANCE="working source snapshot based on $GIT_COMMIT"
+fi
 SOURCE_SHA="$(shasum -a 256 "$SOURCE_ARCHIVE" | awk '{print $1}')"
 SIGNATURE_DESCRIPTION="Ad-hoc signature; local verification only"
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
@@ -267,14 +280,19 @@ if [[ "$SIGNING_IDENTITY" != "-" ]]; then
 fi
 {
     printf 'DCA Script Marker %s beta %s\n' "$APP_VERSION" "$BUILD_NUMBER"
-    printf 'Minimum macOS: 13.0\n'
+    printf 'Minimum macOS: %s\n' "$MINIMUM_MACOS_VERSION"
     printf 'Architectures: arm64, x86_64\n'
     printf 'Signing: %s\n' "$SIGNATURE_DESCRIPTION"
     printf 'Source archive: %s\n' "$(basename "$SOURCE_ARCHIVE")"
     printf 'Source SHA-256: %s\n' "$SOURCE_SHA"
-    printf 'Source snapshot base commit: %s\n' "$GIT_COMMIT"
+    printf 'Source provenance: %s\n' "$SOURCE_PROVENANCE"
     printf 'Licence: GNU AGPL-3.0-or-later\n'
 } > "$PACKAGE_ROOT/RELEASE_MANIFEST.txt"
+
+if [[ -e "$PACKAGE_ROOT/$(basename "$SOURCE_ARCHIVE")" ]]; then
+    echo "The matching source archive must be released beside, not inside, the DMG." >&2
+    exit 1
+fi
 
 if hdiutil create \
     -volname "DCA Script Marker Beta" \
@@ -344,8 +362,8 @@ CHECKSUM_PATH="$OUTPUT_DIRECTORY/SHA256SUMS.txt"
         > "$(basename "$CHECKSUM_PATH")"
 )
 
-echo "Private beta app: $APP_PATH"
-echo "Private beta package: $PACKAGE_PATH"
+echo "Beta app: $APP_PATH"
+echo "Beta package: $PACKAGE_PATH"
 echo "Matching source archive: $SOURCE_ARCHIVE"
 echo "Release manifest: $OUTPUT_MANIFEST"
 echo "SHA-256 checksums: $CHECKSUM_PATH"

@@ -1,15 +1,53 @@
 # DCA Script Marker
 
-DCA Script Marker is a local macOS tool for theatre sound teams. It reads a
-scene-by-scene DCA assignment workbook and a text-based script PDF, adds the
-correct DCA number beside dialogue cues, preserves the PDF page layout, and
-creates a review report for human checking.
+DCA Script Marker is a local macOS tool that marks dialogue cues with the
+correct DCA numbers from a scene-by-scene workbook while preserving the script
+PDF layout and creating a review report.
 
-The current build is a private beta for macOS 13 or later. One Universal app
-supports both Apple Silicon and Intel Macs without requiring Python, Homebrew,
-or Xcode on the tester's computer.
+**中文：** DCA Script Marker 是一款为剧场音响人员提供的本地 macOS 工具。它会读取
+按场次编排的 DCA 列表和文字版剧本 PDF，在对白角色旁标注正确的 DCA 编号，保留原
+PDF 版式，并生成供人工复核的报告。
 
-## Beta status
+The beta 2 release candidate targets macOS 12 Monterey or later as one
+Universal app for Apple Silicon and 64-bit Intel Macs. Its notarized DMG has
+passed installation, launch, marked-PDF generation, and review-report
+generation on Intel macOS 12.7.6. Apple Silicon Monterey 12.x remains
+unverified; the currently published beta 1 requires macOS 13 Ventura or later.
+Testers do not need Python, Homebrew, or Xcode.
+
+**中文：** Beta 2 候选版本面向 macOS 12 Monterey 或更高版本，一个通用安装包同时
+包含 Apple 芯片和 64 位 Intel Mac 版本。其公证 DMG 已在 Intel macOS 12.7.6 实体
+Mac 上通过安装、启动、生成标注 PDF 和复核报告测试；运行 Monterey 12.x 的 Apple
+芯片 Mac 尚未单独验证。目前已发布的 beta 1 需要 macOS 13 Ventura 或更高版本。
+使用者无需安装 Python、Homebrew 或 Xcode。
+
+## Install and quick start / 安装与快速开始
+
+1. Download the `macOS.dmg` from the GitHub Release, open it, and drag
+   **DCA Script Marker** into **Applications**.
+2. **Before opening the app, copy the included Excel DCA State template from
+   the DMG into your own project folder. The app cannot create useful markings
+   from the blank template until you complete it.**
+3. In the copied workbook, enter each dialogue character from cell A3 of
+   `Character List`, then enter one state per row from row 5 of `DCA States`.
+4. Save the completed `.xlsx`. In the app, choose that Excel file, the original
+   text-based script PDF, and an output folder.
+5. Choose a marking style, select **Generate Marked Script**, and review both
+   the marked PDF and the generated review report.
+
+1. 从 GitHub Release 下载 `macOS.dmg`，打开后将 **DCA Script Marker** 拖入
+   **Applications（应用程序）**。
+2. **打开软件前，请先把 DMG 内附带的 Excel DCA 状态模板复制到您自己的项目文件夹。
+   空白模板必须填写完成后才能生成有用的标注。**
+3. 在复制出的工作簿中，从 `Character List` 的 A3 开始填写每个说台词的角色，再从
+   `DCA States` 的第 5 行开始每行填写一个 DCA 状态。
+4. 保存完成的 `.xlsx`。在软件中依次选择该 Excel、原始文字版剧本 PDF 和输出文件夹。
+5. 选择标注方式，点击 **Generate Marked Script**，并同时检查标注 PDF 和复核报告。
+
+Read the complete bilingual [User Guide / 使用手册](USER_GUIDE.md). A printable
+PDF copy is also placed prominently inside every beta DMG.
+
+## Beta status / 测试版状态
 
 The project is not ready for production show use. Every generated script must
 be checked against its review report and spot-checked by a member of the sound
@@ -17,22 +55,29 @@ team. See [BETA_TESTING.md](BETA_TESTING.md) for supported inputs, known
 limitations, and the tester checklist. See [PRIVACY.md](PRIVACY.md) for local
 data handling and [RELEASE_NOTES.md](RELEASE_NOTES.md) for beta readiness.
 
-## Current capabilities
+**重要：** 本项目仍处于测试阶段，尚不适合在演出中未经检查直接使用。每一份生成的
+剧本都必须结合复核报告进行人工核对，并由声音团队抽查关键场次。测试方法和已知限制
+请参阅 [BETA_TESTING.md](BETA_TESTING.md)。所有剧本和表格均在本机处理，不会上传。
 
-- Horizontal and supported legacy vertical DCA workbook formats
-- Editable or flattened PDF markings
-- Full marking, first appearance, and DCA State legend modes
-- Independent DCA number, scene/state, and page header/footer appearance
-- English, Simplified Chinese, and mixed-language scripts with selectable text
-- Local processing with no telemetry or script upload
+## Current capabilities / 主要功能
 
-Scanned/image-only and password-protected PDFs are not supported in the current
-beta.
+- Horizontal and supported legacy vertical DCA workbook formats / 支持横向及旧版纵向 DCA 状态表
+- Editable or flattened PDF markings / 可编辑或扁平化的 PDF 标注
+- Full marking, first appearance, and DCA State legend modes / 全部标注、首次出现及 DCA 状态图例模式
+- Independent DCA number, scene/state, and page header/footer appearance / 可分别设置 DCA 编号、场次及页眉页脚样式
+- English, Simplified Chinese, and mixed-language scripts with selectable text / 支持英文、简体中文及中英混排的可选中文字剧本
+- Local processing with no telemetry or script upload / 完全本地处理，无遥测，不上传剧本
+
+**Current limitations / 当前限制：** Scanned/image-only, password-protected,
+and digitally signed PDFs are not supported. Unusual columns, rotated text,
+tight margins, or nonstandard speaker layouts may reduce matching accuracy.
+当前不支持扫描件或纯图片、密码保护及带数字签名的 PDF；特殊分栏、旋转文字、过窄页边距
+或非标准角色排版可能降低匹配准确度。
 
 ## Development
 
 The marking engine is `dca_script_marker.py`. The macOS packaging workflow and
-private-beta build instructions are in
+beta build instructions are in
 [`packaging/macos/README.md`](packaging/macos/README.md).
 
 ## Licence and source code
