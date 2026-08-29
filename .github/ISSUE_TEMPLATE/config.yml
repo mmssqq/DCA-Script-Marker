@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: User Guide / 使用手册
+    url: https://github.com/mmssqq/DCA-Script-Marker/blob/main/USER_GUIDE.md
+    about: Check the complete bilingual setup and troubleshooting guide. / 查看完整双语设置与故障排查手册。
+  - name: Download the latest release / 下载最新版本
+    url: https://github.com/mmssqq/DCA-Script-Marker/releases/latest
+    about: Confirm the problem still occurs in the latest stable version. / 请先确认最新正式版中仍然存在该问题。

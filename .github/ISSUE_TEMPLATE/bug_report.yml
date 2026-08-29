@@ -1,0 +1,202 @@
+name: Bug Report / 问题报告
+description: Report incorrect, missing, or unexpected markings / 报告错误、缺失或异常标注
+title: "[Bug / 问题] "
+labels:
+  - bug
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve DCA Script Marker. GitHub Issues are public. Please complete the fields below so the problem can be reproduced safely.
+
+        感谢您帮助改进 DCA Script Marker。GitHub Issues 为公开内容。请尽量填写以下内容，以便安全地复现和检查问题。
+
+        **Privacy / 隐私：Never upload a complete script, confidential production document, completed DCA workbook, marked PDF, or unredacted review report. Do not include confidential production names or filenames. Use cropped screenshots and sanitized sample files only. / 请勿上传完整剧本、保密演出资料、已填写的 DCA 表格、完整标注 PDF 或未经处理的复核报告，也不要填写保密的项目名称或文件名。请只使用局部截图和已移除敏感信息的测试文件。**
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting / 提交前
+      options:
+        - label: I searched the existing issues for the same problem. / 我已搜索现有 Issues，确认没有相同问题。
+          required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App version and build / 软件版本和 Build 编号
+      description: Open About DCA Script Marker to find this value. / 请在 About DCA Script Marker 中查看。
+      placeholder: "Example / 示例：1.0.0 (7)"
+    validations:
+      required: true
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS version / macOS 版本
+      placeholder: "Example / 示例：macOS 15.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: processor
+    attributes:
+      label: Mac processor / Mac 处理器
+      options:
+        - Apple Silicon (M1, M2, M3, M4, or later) / Apple 芯片
+        - Intel
+        - Not sure / 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: script_language
+    attributes:
+      label: Script language / 剧本语言
+      placeholder: "English, Simplified Chinese, mixed language, etc. / 英文、简体中文、中英混排等"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: selectable_text
+    attributes:
+      label: Can you select or copy text from the original PDF? / 原始 PDF 中的文字是否可以选择或复制？
+      options:
+        - Yes / 可以
+        - No / 不可以
+        - Not sure / 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: pdf_page_count
+    attributes:
+      label: Original PDF page count / 原始 PDF 总页数
+      description: Use the total shown by the PDF viewer, including the cover. / 请填写 PDF 阅读器显示的总页数，并包含封面。
+      placeholder: "Example / 示例：115"
+    validations:
+      required: true
+
+  - type: input
+    id: pdf_viewer
+    attributes:
+      label: PDF viewer / PDF 阅读器
+      description: Name the app used to inspect the result. / 请填写用于查看标注结果的软件。
+      placeholder: "Example / 示例：Preview / 预览"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: workbook_format
+    attributes:
+      label: Workbook format / DCA 表格格式
+      options:
+        - Supplied horizontal template / 软件附带的横向模板
+        - Legacy vertical workbook / 旧版纵向表格
+        - Not sure / 不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: marking_style
+    attributes:
+      label: Marking style / 标注方式
+      options:
+        - Editable Full Marking / 可编辑完整标注
+        - First Appearance Only / 仅首次出现
+        - DCA State Legend / DCA 状态图例
+    validations:
+      required: true
+
+  - type: dropdown
+    id: state_display
+    attributes:
+      label: DCA State page display / DCA 状态页眉和页脚显示
+      options:
+        - Off / 关闭
+        - Header Only / 仅页眉
+        - Footer Only / 仅页脚
+        - Header and Footer / 页眉和页脚
+        - Not relevant / 不相关
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Where did the problem happen? / 问题出现在哪里？
+      description: Include the scene or DCA State, sequential PDF page position (counting the cover as page 1), printed script page number, and speaker or cue. / 请填写场次或 DCA 状态、PDF 顺序页码（封面为第 1 页）、剧本内印刷页码以及角色或提示。
+      placeholder: |
+        Scene or DCA State / 场次或 DCA 状态：
+        Sequential PDF page / PDF 顺序页码：
+        Printed script page / 剧本内印刷页码：
+        Speaker or cue / 角色或提示：
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result / 预期结果
+      description: What should the app have produced? / 软件应该生成什么结果？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result / 实际结果
+      description: What did the app produce instead? Include the exact warning text if one appeared. / 软件实际生成了什么？如果出现警告，请填写准确内容。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: |
+        1. Select… / 选择……
+        2. Choose… / 设置……
+        3. Generate… / 生成……
+        4. Observe… / 出现……
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reopen_result
+    attributes:
+      label: Did closing and reopening the marked PDF change the result? / 关闭并重新打开标注 PDF 后，结果是否发生变化？
+      options:
+        - No / 没有变化
+        - Yes / 有变化
+        - Not tried / 尚未测试
+        - Not relevant / 不相关
+    validations:
+      required: true
+
+  - type: textarea
+    id: safe_evidence
+    attributes:
+      label: Safe screenshots or sanitized evidence / 安全截图或已脱敏资料
+      description: Drag cropped screenshots here, or paste a short sanitized review-report excerpt. Do not attach complete production files. / 可拖入局部截图，或粘贴一小段已脱敏的复核报告。请勿附上完整演出文件。
+      placeholder: Optional / 选填
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context / 补充信息
+      description: Include relevant colour, size, font, position, selected-page range, or PDF viewer details. / 可补充颜色、字号、字体、位置、选定页范围或 PDF 阅读器等信息。
+      placeholder: Optional / 选填
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: privacy_confirmation
+    attributes:
+      label: Privacy confirmation / 隐私确认
+      options:
+        - label: I confirm that this report and its attachments contain no complete scripts, confidential production documents, completed DCA workbooks, marked PDFs, or unredacted review reports. / 我确认本报告及附件不包含完整剧本、保密演出资料、已填写的 DCA 表格、完整标注 PDF 或未经处理的复核报告。
+          required: true

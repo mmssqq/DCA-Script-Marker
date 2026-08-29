@@ -102,6 +102,19 @@ tight margins, or nonstandard speaker layouts may reduce matching accuracy.
 当前不支持扫描件或纯图片、密码保护及带数字签名的 PDF；特殊分栏、旋转文字、过窄页边距
 或非标准角色排版可能降低匹配准确度。
 
+## Report a bug / 报告问题
+
+Use the bilingual [Bug Report / 问题报告](https://github.com/mmssqq/DCA-Script-Marker/issues/new?template=bug_report.yml)
+form. Include the app build, macOS version, Mac processor, marking style, exact
+page or scene, expected result, and actual result. Never upload a complete or
+confidential production script, completed workbook, marked PDF, or unredacted
+review report; use cropped screenshots and sanitized samples only.
+
+请使用双语 [Bug Report / 问题报告](https://github.com/mmssqq/DCA-Script-Marker/issues/new?template=bug_report.yml)
+表单，并填写软件 Build、macOS 版本、Mac 处理器、标注方式、准确页面或场次、预期结果和
+实际结果。请勿上传完整或保密的演出剧本、已填写的 DCA 表格、完整标注 PDF 或未经处理的
+复核报告；请只使用局部截图和已移除敏感信息的测试资料。
+
 ## Development
 
 The marking engine is `dca_script_marker.py`. The macOS packaging workflow and

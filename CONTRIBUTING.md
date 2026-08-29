@@ -11,8 +11,10 @@ The GNU AGPL already permits users to fork, study, and modify the published
 source. This temporary upstream pull-request pause does not reduce those rights.
 
 Never attach a confidential script, DCA workbook, marked PDF, or review report
-to a public issue. Use the fields in [ISSUE_REPORT_TEMPLATE.md](ISSUE_REPORT_TEMPLATE.md)
-and share sanitized files only when you have permission.
+to a public issue. Use the bilingual
+[Bug Report / 问题报告](https://github.com/mmssqq/DCA-Script-Marker/issues/new?template=bug_report.yml)
+form and share sanitized files only when you have permission. The full field
+reference remains available in [ISSUE_REPORT_TEMPLATE.md](ISSUE_REPORT_TEMPLATE.md).
 
 A long-term contributor-licensing policy will be published before outside code
 contributions are accepted upstream.
