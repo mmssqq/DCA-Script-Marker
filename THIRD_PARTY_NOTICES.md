@@ -3,12 +3,12 @@
 DCA Script Marker includes or is built with the components below. Each
 component remains under its own licence. The exact upstream source archives
 and their original licence files are included in the corresponding-source ZIP
-that accompanies every beta binary.
+that accompanies every release binary.
 
 | Component | Version | Licence |
 | --- | --- | --- |
-| PyMuPDF | 1.27.2.3 | GNU AGPL-3.0-or-later or Artifex commercial licence; this beta uses the AGPL option |
-| MuPDF | 1.27.2 | GNU AGPL-3.0-or-later or Artifex commercial licence; this beta uses the AGPL option |
+| PyMuPDF | 1.27.2.3 | GNU AGPL-3.0-or-later or Artifex commercial licence; this release uses the AGPL option |
+| MuPDF | 1.27.2 | GNU AGPL-3.0-or-later or Artifex commercial licence; this release uses the AGPL option |
 | CPython | 3.11.5 | Python Software Foundation License Version 2 and incorporated-software notices |
 | OpenSSL | 3.0.10 | Apache License 2.0 |
 | openpyxl | 3.1.5 | MIT License |

@@ -1,9 +1,9 @@
-# Source code for distributed betas
+# Source code for distributed releases
 
 DCA Script Marker is licensed under GNU AGPL version 3 or later.
 
-Every beta release provides a separate archive named like
-`DCA-Script-Marker-v0.9.0-beta.N-source.zip` beside the macOS DMG. That archive
+Every release provides a separate archive named like
+`DCA-Script-Marker-v1.0.0-source.zip` beside the macOS DMG. That archive
 is the authoritative corresponding source for the binary released with it. It
 includes:
 
@@ -22,7 +22,7 @@ verify it with:
 shasum -a 256 -c SOURCE_MANIFEST.sha256
 ```
 
-The project home is <https://github.com/mmssqq/DCA-Script-Marker>. When a beta
+The project home is <https://github.com/mmssqq/DCA-Script-Marker>. When a release
 is published there, download the source ZIP from the same GitHub Release as the
 DMG. The release tag and accompanying source archive should be used instead of
 a later, mutable branch.

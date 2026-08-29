@@ -55,6 +55,27 @@ class CanonicalTemplateTests(unittest.TestCase):
             ],
         )
 
+    def test_character_dropdowns_cover_all_dca_assignment_cells(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            workbook = load_workbook(TEMPLATE_FILE)
+        self.addCleanup(workbook.close)
+
+        validations = list(
+            workbook["DCA States"].data_validations.dataValidation
+        )
+        self.assertEqual(len(validations), 2)
+        self.assertEqual(
+            {str(validation.sqref) for validation in validations},
+            {"G2:R3", "G5:R1072"},
+        )
+        for validation in validations:
+            self.assertEqual(validation.type, "list")
+            self.assertEqual(
+                validation.formula1,
+                "'Character List'!$A$3:$A$202",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

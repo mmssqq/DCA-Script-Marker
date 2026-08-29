@@ -1,5 +1,61 @@
 # Release notes
 
+## 1.0.0 (build 5) — first stable release
+
+DCA Script Marker 1.0.0 is the first stable GitHub release. It is a local,
+Universal macOS app for theatre sound teams and supports macOS 12 Monterey or
+later on Apple Silicon and 64-bit Intel Macs. Users do not need Python,
+Homebrew, or Xcode.
+
+### Highlights
+
+- Marks dialogue cues with DCA assignments from the supplied scene/state
+  workbook while preserving the script PDF layout
+- Supports English, Simplified Chinese, and mixed-language scripts, including
+  broader bold, centred, multi-column, cast-track, combined-speaker, and
+  full-stop speaker-label layouts
+- Protects stage directions from being treated as dialogue labels
+- Uses strict Page Hint matching and reports the exact cue page when an
+  unresolved state conflicts with its configured hint
+- Adds automatic safety warnings for missing states, zero marks, incomplete
+  assignments, and known speakers without an active assignment
+- Provides editable annotations in all three user-facing modes: full marking,
+  first appearance only, and DCA State legends
+- Offers Header Only, Footer Only, Header and Footer, or Off, with independent
+  text and border styling and movable text-plus-border annotations
+- Provides eight readable annotation colours for DCA numbers, in-script State
+  labels, and page header/footer text and borders
+- Includes the finalized bilingual workbook, complete bilingual manual, safe
+  Save as New/Replace guidance, privacy information, and matching source code
+
+### Verification before publication
+
+- 79 automated engine, interface-contract, template, regression-runner, and
+  release-packaging tests pass
+- Regression coverage exercises thousands of dialogue cues and dozens of
+  configured states across varied script layouts; source scripts and workbooks
+  used for internal validation are not included in the repository or release
+- The Universal build workflow verifies both host architectures and launches
+  the self-contained Apple Silicon and Intel engines independently
+- The public DMG is published only after Developer ID signing, Apple
+  notarization, ticket stapling, Gatekeeper assessment, disk-image validation,
+  source-manifest verification, and SHA-256 checksum generation
+- Physical Intel macOS 12.7.6 installation and marked-PDF generation passed on
+  the preceding release candidate; Apple Silicon Monterey 12.x remains
+  unverified
+
+### Important limitations
+
+- Every exported script must be compared with the original PDF, completed DCA
+  workbook, and review report before rehearsal or performance
+- Scanned/image-only, password-protected, and digitally signed PDFs are not
+  supported
+- Unusual columns, rotated text, tight margins, or nonstandard speaker layouts
+  can reduce matching accuracy
+- Editable annotation behaviour can vary between PDF viewers; Save as New is
+  recommended when comparing styles
+- There is no automatic updater
+
 ## 0.9.0 beta 2 — Monterey compatibility candidate
 
 This build extends the public pre-release beta to macOS 12 Monterey. The
@@ -36,8 +92,8 @@ Ventura or later.
 - One Universal app for Apple Silicon and 64-bit Intel Macs
 - Self-contained marker engines; testers do not need Python, Homebrew, or Xcode
 - macOS 13 Ventura or later
-- Improved matching for the 《无间道》 test, including early music-state cues,
-  title-case English speaker labels, and `梁科长`
+- Improved multilingual and mixed-layout matching, including early music-state
+  cues, title-case English speaker labels, and Chinese role names
 - Editable page header/footer labels whose text and border move together
 - Independent page header/footer text, font, size, and border colour
 - Safer Save as New and Replace guidance for Apple Preview
@@ -48,8 +104,8 @@ Ventura or later.
 - 25 automated engine, template, and release-packaging tests pass
 - Universal Swift Release build succeeds
 - Apple Silicon and Intel frozen engines start without external dependencies
-- Both frozen engines produced matching review results in a real-script smoke
-  test
+- Both frozen engines produced matching review results in a representative
+  script smoke test
 - The Universal app and both embedded engines are signed with Developer ID and
   Hardened Runtime under one Team ID
 - The DMG is accepted by Apple's notarization service, stapled, Gatekeeper
@@ -67,7 +123,7 @@ Ventura or later.
 - The exact matching source ZIP is supplied beside the DMG as a separate
   release file
 - Dependency source archives are identified by locked SHA-256 checksums
-- No theatre script PDFs or private test materials are included
+- No theatre script PDFs or internal validation materials are included
 
 ### Known beta limitations
 

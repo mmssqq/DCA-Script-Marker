@@ -44,14 +44,23 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertEqual(project.count("MACOSX_DEPLOYMENT_TARGET = 12.0;"), 2)
         self.assertNotIn("MACOSX_DEPLOYMENT_TARGET = 13.0;", project)
-        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 2;"), 2)
+        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 5;"), 2)
+        self.assertEqual(project.count("MARKETING_VERSION = 1.0.0;"), 2)
         self.assertNotIn("path(percentEncoded: false)", content_view)
 
         for build_script in (app_builder, engine_builder):
             self.assertIn('DCA_MINIMUM_MACOS:-12.0', build_script)
 
         for build_script in (app_builder, engine_builder, source_builder):
-            self.assertIn('DCA_BUILD_NUMBER:-2', build_script)
+            self.assertIn('DCA_BUILD_NUMBER:-5', build_script)
+            self.assertIn('DCA_VERSION:-1.0.0', build_script)
+        for release_script in (app_builder, source_builder):
+            self.assertIn('DCA_RELEASE_CHANNEL:-stable', release_script)
+            self.assertIn('DCA_RELEASE_CHANNEL must be stable or beta.', release_script)
+        self.assertIn('RELEASE_TAG="v$APP_VERSION"', app_builder)
+        self.assertIn('RELEASE_TAG="v$APP_VERSION-beta.$BUILD_NUMBER"', app_builder)
+        self.assertIn('VOLUME_NAME="DCA Script Marker"', app_builder)
+        self.assertIn('Release channel: %s\\n', app_builder)
         self.assertIn(
             'MACOSX_DEPLOYMENT_TARGET="$MINIMUM_MACOS_VERSION"', app_builder
         )
@@ -82,7 +91,14 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertIn("USER_GUIDE.md", build_script)
         self.assertIn("START HERE - User Guide - 使用手册.pdf", build_script)
+        self.assertIn("TESTING_AND_SAFETY.md", build_script)
+        self.assertIn("ISSUE_REPORT_TEMPLATE.md", build_script)
+        self.assertIn(
+            'FEEDBACK_DOCUMENT_NAME="ISSUE_REPORT_TEMPLATE.md"', build_script
+        )
         self.assertIn("Install and quick start / 安装与快速开始", readme)
+        self.assertIn("Safety and limitations / 安全说明与限制", readme)
+        self.assertIn("Version 1.0.0", guide)
         self.assertIn("Character List", guide)
         self.assertIn("Start Line Text", guide)
         self.assertIn("中文使用手册", guide)
@@ -95,6 +111,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertIn("Install the app and copy the template", pdf_text)
         self.assertIn("安装软件并复制模板", pdf_text)
+        self.assertIn("Version 1.0.0", pdf_text)
 
     def test_macos_version_comparison_executes(self):
         verifier = PACKAGING_ROOT / "verify_beta_app.sh"

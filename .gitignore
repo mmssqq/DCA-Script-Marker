@@ -222,8 +222,12 @@ __marimo__/
 __pycache__/
 *.pyc
 marked_*.pdf
+*_marked_*.pdf
 *_review_*.txt
 *.inspect.ndjson
+tests/real_script_regressions.local.json
+tests/approved_real_script_baseline.local.json
+build/real-script-regressions/
 .DS_Store
 xcuserdata/
 *.xcuserstate

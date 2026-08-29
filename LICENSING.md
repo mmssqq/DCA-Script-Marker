@@ -19,19 +19,19 @@ recipients under the GNU AGPL.
 
 This option is being preserved so a future edition may use commercially
 licensed PDF technology and, if appropriate, be distributed through the Mac
-App Store. The GitHub beta remains fully usable under the GNU AGPL, including
+App Store. The GitHub release remains fully usable under the GNU AGPL, including
 when users choose to support development with voluntary donations.
 
 ## Corresponding source
 
-Every distributed beta binary must be accompanied by the exact source archive
+Every distributed release binary must be accompanied by the exact source archive
 created for that build. See [SOURCE.md](SOURCE.md). Third-party components keep
 their own copyright notices and licence terms; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Contributions during public beta
+## Contributions
 
 Bug reports and testing feedback are welcome. Code contributions are not yet
-being accepted during the public beta while a contributor-licensing policy is
+being accepted while a contributor-licensing policy is
 prepared. Users remain free to fork and modify the AGPL source. See
 [CONTRIBUTING.md](CONTRIBUTING.md).

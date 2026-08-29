@@ -8,18 +8,16 @@ PDF layout and creating a review report.
 按场次编排的 DCA 列表和文字版剧本 PDF，在对白角色旁标注正确的 DCA 编号，保留原
 PDF 版式，并生成供人工复核的报告。
 
-The beta 2 release candidate targets macOS 12 Monterey or later as one
-Universal app for Apple Silicon and 64-bit Intel Macs. Its notarized DMG has
+Version 1.0.0 targets macOS 12 Monterey or later as one Universal app for
+Apple Silicon and 64-bit Intel Macs. The previous notarized release candidate
 passed installation, launch, marked-PDF generation, and review-report
 generation on Intel macOS 12.7.6. Apple Silicon Monterey 12.x remains
-unverified; the currently published beta 1 requires macOS 13 Ventura or later.
-Testers do not need Python, Homebrew, or Xcode.
+unverified. Users do not need Python, Homebrew, or Xcode.
 
-**中文：** Beta 2 候选版本面向 macOS 12 Monterey 或更高版本，一个通用安装包同时
-包含 Apple 芯片和 64 位 Intel Mac 版本。其公证 DMG 已在 Intel macOS 12.7.6 实体
-Mac 上通过安装、启动、生成标注 PDF 和复核报告测试；运行 Monterey 12.x 的 Apple
-芯片 Mac 尚未单独验证。目前已发布的 beta 1 需要 macOS 13 Ventura 或更高版本。
-使用者无需安装 Python、Homebrew 或 Xcode。
+**中文：** 1.0.0 版本面向 macOS 12 Monterey 或更高版本，一个通用安装包同时包含
+Apple 芯片和 64 位 Intel Mac 版本。此前经过公证的候选版本已在 Intel macOS 12.7.6
+实体 Mac 上通过安装、启动、生成标注 PDF 和复核报告测试；运行 Monterey 12.x 的
+Apple 芯片 Mac 尚未单独验证。使用者无需安装 Python、Homebrew 或 Xcode。
 
 ## Install and quick start / 安装与快速开始
 
@@ -45,26 +43,29 @@ Mac 上通过安装、启动、生成标注 PDF 和复核报告测试；运行 M
 5. 选择标注方式，点击 **Generate Marked Script**，并同时检查标注 PDF 和复核报告。
 
 Read the complete bilingual [User Guide / 使用手册](USER_GUIDE.md). A printable
-PDF copy is also placed prominently inside every beta DMG.
+PDF copy is also placed prominently inside every release DMG.
 
-## Beta status / 测试版状态
+## Safety and limitations / 安全说明与限制
 
-The project is not ready for production show use. Every generated script must
-be checked against its review report and spot-checked by a member of the sound
-team. See [BETA_TESTING.md](BETA_TESTING.md) for supported inputs, known
-limitations, and the tester checklist. See [PRIVACY.md](PRIVACY.md) for local
-data handling and [RELEASE_NOTES.md](RELEASE_NOTES.md) for beta readiness.
+DCA Script Marker automates a review task; it cannot guarantee correct results
+for every PDF layout. Before rehearsal or performance, a member of the sound
+team must compare every exported script with the original PDF, the completed
+DCA workbook, and the review report. See
+[Testing and safety](TESTING_AND_SAFETY.md) for supported inputs, limitations,
+and the verification checklist. See [PRIVACY.md](PRIVACY.md) for local data
+handling and [RELEASE_NOTES.md](RELEASE_NOTES.md) for release details.
 
-**重要：** 本项目仍处于测试阶段，尚不适合在演出中未经检查直接使用。每一份生成的
-剧本都必须结合复核报告进行人工核对，并由声音团队抽查关键场次。测试方法和已知限制
-请参阅 [BETA_TESTING.md](BETA_TESTING.md)。所有剧本和表格均在本机处理，不会上传。
+**重要：** DCA Script Marker 可协助自动标注，但无法保证适用于所有 PDF 排版。
+排练或正式演出前，音响团队成员必须将每份导出的剧本与原始 PDF、已填写的 DCA 表格
+及复核报告进行人工核对。支持范围、限制和检查步骤请参阅
+[Testing and safety](TESTING_AND_SAFETY.md)。所有剧本和表格均在本机处理，不会上传。
 
 ## Current capabilities / 主要功能
 
 - Horizontal and supported legacy vertical DCA workbook formats / 支持横向及旧版纵向 DCA 状态表
-- Editable or flattened PDF markings / 可编辑或扁平化的 PDF 标注
-- Full marking, first appearance, and DCA State legend modes / 全部标注、首次出现及 DCA 状态图例模式
-- Independent DCA number, scene/state, and page header/footer appearance / 可分别设置 DCA 编号、场次及页眉页脚样式
+- Editable PDF annotations in every user-facing marking mode / 所有用户可选标注方式均使用可编辑 PDF 标注
+- Editable full marking, first appearance, and DCA State legend modes / 可编辑完整标注、首次出现及 DCA 状态图例模式
+- Independent DCA number and scene/state appearance, with header-only, footer-only, both, or off / 可分别设置 DCA 编号及场次样式，并可选择仅页眉、仅页脚、同时显示或关闭
 - English, Simplified Chinese, and mixed-language scripts with selectable text / 支持英文、简体中文及中英混排的可选中文字剧本
 - Local processing with no telemetry or script upload / 完全本地处理，无遥测，不上传剧本
 
@@ -77,7 +78,7 @@ tight margins, or nonstandard speaker layouts may reduce matching accuracy.
 ## Development
 
 The marking engine is `dca_script_marker.py`. The macOS packaging workflow and
-beta build instructions are in
+release build instructions are in
 [`packaging/macos/README.md`](packaging/macos/README.md).
 
 ## Licence and source code
@@ -86,7 +87,7 @@ DCA Script Marker is free and open-source software licensed under the GNU
 Affero General Public License, version 3 or later. The copyright holder may
 also offer the same original code under separate terms in the future.
 
-Every beta binary must be distributed with its matching source archive. See
+Every release binary must be distributed with its matching source archive. See
 [LICENSING.md](LICENSING.md), [SOURCE.md](SOURCE.md), and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details. Coffee donations
 are welcome but never required to use the software.

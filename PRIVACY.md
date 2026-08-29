@@ -37,8 +37,7 @@ private sharing method with the maintainer.
 
 ## Network access
 
-The current beta does not make network requests. The macOS app is distributed
+The current app does not make network requests. The macOS app is distributed
 outside the Mac App Store and is not App-Sandboxed, so this statement describes
 the app's implemented behavior rather than an operating-system-enforced network
 restriction.
-

@@ -17,6 +17,30 @@ private struct MarkerRuntime {
     let argumentPrefix: [String]
 }
 
+private struct MarkerSafetyWarning: Decodable {
+    let code: String
+    let severity: String
+    let message: String
+}
+
+private struct MarkerCompletionResult: Decodable {
+    let markedCount: Int
+    let outputPDF: String
+    let reviewReport: String
+    let safetyLevel: String
+    let safetyWarningCount: Int
+    let safetyWarnings: [MarkerSafetyWarning]
+
+    enum CodingKeys: String, CodingKey {
+        case markedCount = "marked_count"
+        case outputPDF = "output_pdf"
+        case reviewReport = "review_report"
+        case safetyLevel = "safety_level"
+        case safetyWarningCount = "safety_warning_count"
+        case safetyWarnings = "safety_warnings"
+    }
+}
+
 struct ContentView: View {
     @State private var templatePath = ""
     @State private var scriptPath = ""
@@ -38,7 +62,7 @@ struct ContentView: View {
     @State private var stateFont = "PingFang SC"
     @State private var statePosition = "Left Gutter"
     @State private var legendPosition = "Left Gutter"
-    @State private var showPageStateHeaderFooter = true
+    @State private var pageStateDisplay = "Header and Footer"
     @State private var pageStateTextColour = "Blue"
     @State private var pageStateTextSize = "Medium"
     @State private var pageStateTextFont = "PingFang SC"
@@ -49,7 +73,6 @@ struct ContentView: View {
 
     let styles = [
         "Editable Full Marking",
-        "Full Marking",
         "First Appearance Only",
         "DCA State Legend"
     ]
@@ -228,7 +251,7 @@ struct ContentView: View {
                 statePosition: $statePosition,
                 legendPosition: $legendPosition,
                 selectedStyle: selectedStyle,
-                showPageStateHeaderFooter: $showPageStateHeaderFooter,
+                pageStateDisplay: $pageStateDisplay,
                 pageStateTextColour: $pageStateTextColour,
                 pageStateTextSize: $pageStateTextSize,
                 pageStateTextFont: $pageStateTextFont,
@@ -268,14 +291,12 @@ struct ContentView: View {
 
     func helpText(for style: String) -> String {
         switch style {
-        case "Full Marking":
-            return "Marks every dialogue line with its DCA number.\n为每一句角色台词标注对应的 DCA 编号。"
         case "Editable Full Marking":
             return "Marks every dialogue line with an editable DCA number.\n为每一句角色台词标注可编辑的 DCA 编号。"
         case "First Appearance Only":
-            return "Marks only the first time a character appears in each DCA State.\n在每个 DCA 状态中，只标注每个角色第一次出现时的台词。"
+            return "Marks each character's first appearance in every DCA State with editable annotations.\n在每个 DCA 状态中，只为每个角色第一次出现的台词创建可编辑标注。"
         default:
-            return "Creates a DCA list for each DCA State.\n为每个 DCA 状态创建 DCA 分配列表。"
+            return "Creates an editable DCA list; its page labels can also be moved or deleted.\n创建可编辑的 DCA 分配列表；页面标签也可以移动或删除。"
         }
     }
 
@@ -367,6 +388,77 @@ struct ContentView: View {
     func resultText(from output: Pipe) -> String {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private func showSafetyAlert(_ result: MarkerCompletionResult) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = (
+            "Review required before use / 使用前需要复核"
+        )
+
+        let warningLines = result.safetyWarnings.prefix(3).map {
+            "• \($0.message)"
+        }
+        let remainingCount = max(
+            0,
+            result.safetyWarningCount - warningLines.count
+        )
+        let remainingText = remainingCount > 0
+            ? "\n• \(remainingCount) more warning(s) are listed in the review report."
+            : ""
+
+        alert.informativeText = """
+        The PDF was created, but the automatic safety check found possible setup or matching problems. Check the review report and marked PDF before rehearsal.
+
+        PDF 已生成，但自动安全检查发现可能的设置或匹配问题。请在排练前核对复核报告和标注后的 PDF。
+
+        \(warningLines.joined(separator: "\n"))\(remainingText)
+        """
+        alert.addButton(
+            withTitle: "Show Output Folder"
+        )
+        alert.addButton(
+            withTitle: "Open Review Report"
+        )
+        alert.addButton(withTitle: "Later")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            let outputFolder = URL(
+                fileURLWithPath: result.outputPDF
+            ).deletingLastPathComponent()
+            NSWorkspace.shared.open(outputFolder)
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(
+                URL(fileURLWithPath: result.reviewReport)
+            )
+        default:
+            break
+        }
+    }
+
+    private func showSafetyUnavailableAlert() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = (
+            "Safety result unavailable / 无法读取安全检查结果"
+        )
+        alert.informativeText = """
+        The PDF was created, but the app could not read the automatic safety result. Open the output folder and check the review report and marked PDF manually before rehearsal.
+
+        PDF 已生成，但软件无法读取自动安全检查结果。请打开输出文件夹，并在排练前人工核对复核报告和标注后的 PDF。
+        """
+        alert.addButton(
+            withTitle: "Show Output Folder"
+        )
+        alert.addButton(withTitle: "Later")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(
+                URL(fileURLWithPath: outputFolder)
+            )
+        }
     }
 
     private func markerRuntime() -> MarkerRuntime? {
@@ -506,8 +598,13 @@ struct ContentView: View {
         message = "Creating your marked script…"
 
         DispatchQueue.global(qos: .userInitiated).async {
+            let resultFile = FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    "DCA-Script-Marker-Result-\(UUID().uuidString).json"
+                )
             defer {
                 removeLegendOverridesFile(legendOverridesFile)
+                try? FileManager.default.removeItem(at: resultFile)
             }
 
             guard let runtime = markerRuntime() else {
@@ -527,6 +624,7 @@ struct ContentView: View {
                 "--script", scriptPath,
                 "--output", outputFolder,
                 "--output-mode", outputMode,
+                "--result-json-file", resultFile.path,
                 "--style", selectedStyle,
                 "--number-colour", numberColour.lowercased(),
                 "--number-scale", scale(for: numberSize),
@@ -542,11 +640,9 @@ struct ContentView: View {
                 "--page-state-scale", scale(for: pageStateTextSize),
                 "--page-state-font", pageStateTextFont,
                 "--page-state-border-colour", pageStateBorderColour.lowercased(),
+                "--page-state-display", pageStateDisplayArgument(for: pageStateDisplay),
                 "--legend-position", legendPosition,
             ]
-            if showPageStateHeaderFooter {
-                arguments.append("--page-state-header-footer")
-            }
             if markSelectedPages {
                 arguments += [
                     "--start-page", startPage,
@@ -566,8 +662,15 @@ struct ContentView: View {
                 let data = output.fileHandleForReading.readDataToEndOfFile()
                 process.waitUntilExit()
                 let result = String(data: data, encoding: .utf8) ?? "No output received."
+                let completionData = try? Data(contentsOf: resultFile)
 
                 DispatchQueue.main.async {
+                    let completionResult = completionData.flatMap {
+                        try? JSONDecoder().decode(
+                            MarkerCompletionResult.self,
+                            from: $0
+                        )
+                    }
                     isGenerating = false
                     if process.terminationStatus == 0 {
                         NSWorkspace.shared.open(
@@ -577,6 +680,13 @@ struct ContentView: View {
                             message = result + "\n\nReplacement complete. Close and reopen the PDF in Preview before reviewing it."
                         } else {
                             message = result
+                        }
+                        if let completionResult {
+                            if completionResult.safetyLevel != "ok" {
+                                showSafetyAlert(completionResult)
+                            }
+                        } else {
+                            showSafetyUnavailableAlert()
                         }
                     } else {
                         message = "The marker could not finish:\n\(result)"
@@ -625,6 +735,15 @@ struct ContentView: View {
         default: return "0"
         }
     }
+
+    func pageStateDisplayArgument(for display: String) -> String {
+        switch display {
+        case "Off": return "off"
+        case "Header Only": return "header"
+        case "Footer Only": return "footer"
+        default: return "both"
+        }
+    }
 }
 
 struct AnnotationStyleSheet: View {
@@ -639,7 +758,7 @@ struct AnnotationStyleSheet: View {
     @Binding var statePosition: String
     @Binding var legendPosition: String
     let selectedStyle: String
-    @Binding var showPageStateHeaderFooter: Bool
+    @Binding var pageStateDisplay: String
     @Binding var pageStateTextColour: String
     @Binding var pageStateTextSize: String
     @Binding var pageStateTextFont: String
@@ -647,112 +766,142 @@ struct AnnotationStyleSheet: View {
     let cancel: () -> Void
     let continueAction: () -> Void
 
-    private let colours = ["Red", "Blue", "Black", "Green"]
+    private let colours = [
+        "Red", "Blue", "Black", "Green",
+        "Orange", "Purple", "Grey", "Brown"
+    ]
     private let sizes = ["Small", "Medium", "Large"]
     private let numberFonts = ["Helvetica", "Times", "Courier"]
     private let stateFonts = ["PingFang SC", "Chinese System", "Helvetica", "Times", "Courier"]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Annotation Style")
-                .font(.title2.bold())
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Annotation Style")
+                    .font(.title2.bold())
 
-            Text("Choose the appearance of DCA numbers and DCA State labels.")
-                .foregroundStyle(.secondary)
+                Text("Choose the appearance of DCA numbers and DCA State labels.")
+                    .foregroundStyle(.secondary)
+            }
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    StyleSection(
-                        title: "DCA Numbers",
-                        colour: $numberColour,
-                        size: $numberSize,
-                        font: $numberFont,
-                        colours: colours,
-                        sizes: sizes,
-                        fonts: numberFonts
-                    )
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            StyleSection(
+                                title: "DCA Numbers",
+                                colour: $numberColour,
+                                size: $numberSize,
+                                font: $numberFont,
+                                colours: colours,
+                                sizes: sizes,
+                                fonts: numberFonts
+                            )
 
-                    PickerRow(
-                        title: "DCA Number Horizontal Position",
-                        selection: $numberPosition,
-                        options: ["Near Script", "Standard", "Far Left"]
-                    )
-                    PickerRow(
-                        title: "DCA Number Vertical Position",
-                        selection: $numberVerticalPosition,
-                        options: [
-                            "Slightly Up",
-                            "Default",
-                            "Slightly Down"
-                        ]
-                    )
-                    Divider()
+                            PickerRow(
+                                title: "Horizontal Position",
+                                selection: $numberPosition,
+                                options: ["Near Script", "Standard", "Far Left"]
+                            )
+                            PickerRow(
+                                title: "Vertical Position",
+                                selection: $numberVerticalPosition,
+                                options: [
+                                    "Slightly Up",
+                                    "Default",
+                                    "Slightly Down"
+                                ]
+                            )
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    StyleSection(
-                        title: "DCA State / Snapshot / Scene",
-                        colour: $stateColour,
-                        size: $stateSize,
-                        font: $stateFont,
-                        colours: colours,
-                        sizes: sizes,
-                        fonts: stateFonts
-                    )
+                        Divider()
 
-                    PickerRow(
-                        title: "DCA State Position",
-                        selection: $statePosition,
-                        options: ["Left Gutter", "Far from Script"]
-                    )
+                        VStack(alignment: .leading, spacing: 10) {
+                            StyleSection(
+                                title: "DCA State / Snapshot / Scene",
+                                colour: $stateColour,
+                                size: $stateSize,
+                                font: $stateFont,
+                                colours: colours,
+                                sizes: sizes,
+                                fonts: stateFonts
+                            )
 
-                    if selectedStyle == "DCA State Legend" {
-                        PickerRow(
-                            title: "DCA State Legend Position",
-                            selection: $legendPosition,
-                            options: ["Left Gutter", "Near Script"]
-                        )
+                            PickerRow(
+                                title: "Position",
+                                selection: $statePosition,
+                                options: ["Left Gutter", "Far from Script"]
+                            )
+
+                            if selectedStyle == "DCA State Legend" {
+                                PickerRow(
+                                    title: "Legend Position",
+                                    selection: $legendPosition,
+                                    options: ["Left Gutter", "Near Script"]
+                                )
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     Divider()
 
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         Text("DCA State Header & Footer")
                             .font(.headline)
 
-                        Toggle(
-                            "Show current DCA State in page header and footer",
-                            isOn: $showPageStateHeaderFooter
+                        PickerRow(
+                            title: "Show Current DCA State",
+                            selection: $pageStateDisplay,
+                            options: [
+                                "Off",
+                                "Header Only",
+                                "Footer Only",
+                                "Header and Footer"
+                            ]
                         )
 
-                        VStack(alignment: .leading, spacing: 12) {
-                            PickerRow(
-                                title: "Text Colour",
-                                selection: $pageStateTextColour,
-                                options: colours
-                            )
-                            PickerRow(
-                                title: "Text Size",
-                                selection: $pageStateTextSize,
-                                options: sizes
-                            )
-                            PickerRow(
-                                title: "Text Font",
-                                selection: $pageStateTextFont,
-                                options: stateFonts
-                            )
-                            PickerRow(
-                                title: "Border Colour",
-                                selection: $pageStateBorderColour,
-                                options: colours
-                            )
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                PickerRow(
+                                    title: "Text Colour",
+                                    selection: $pageStateTextColour,
+                                    options: colours
+                                )
+                                PickerRow(
+                                    title: "Text Size",
+                                    selection: $pageStateTextSize,
+                                    options: sizes
+                                )
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Divider()
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                PickerRow(
+                                    title: "Text Font",
+                                    selection: $pageStateTextFont,
+                                    options: stateFonts
+                                )
+                                PickerRow(
+                                    title: "Border Colour",
+                                    selection: $pageStateBorderColour,
+                                    options: colours
+                                )
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .disabled(!showPageStateHeaderFooter)
-                        .opacity(showPageStateHeaderFooter ? 1 : 0.5)
+                        .disabled(pageStateDisplay == "Off")
+                        .opacity(pageStateDisplay == "Off" ? 0.5 : 1)
 
                         Text("Chinese labels automatically use a compatible Chinese font.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 8)
             }
 
@@ -763,8 +912,15 @@ struct AnnotationStyleSheet: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(28)
-        .frame(width: 600, height: 650)
+        .padding(24)
+        .frame(
+            minWidth: 760,
+            idealWidth: 800,
+            maxWidth: 800,
+            minHeight: 580,
+            idealHeight: 650,
+            maxHeight: 650
+        )
     }
 }
 
@@ -851,7 +1007,7 @@ struct HelpSheet: View {
                     HelpStep(
                         number: "3",
                         title: "Choose a marking style / 选择标注方式",
-                        detail: "Full Marking marks every dialogue line. Editable Full Marking creates editable PDF numbers. First Appearance Only marks only the first time a character appears in each DCA State. DCA State Legend creates an editable membership list.\n完整标注会标注每一句角色台词；可编辑完整标注会创建可编辑的 PDF 编号；仅首次出现会在每个 DCA 状态中只标注角色首次出现时的台词；DCA 状态图例会创建可编辑的 DCA 分配列表。"
+                        detail: "All three styles create movable PDF annotations. Editable Full Marking marks every dialogue line. First Appearance Only marks each character's first cue in every DCA State. DCA State Legend creates an editable membership list. Page header/footer text and its border move or delete together.\n三种标注方式都会创建可移动的 PDF 标注。可编辑完整标注会标注每一句角色台词；仅首次出现会在每个 DCA 状态中标注每个角色的第一句台词；DCA 状态图例会创建可编辑的分配列表。页眉或页脚文字与边框会一起移动或删除。"
                     )
                     HelpStep(
                         number: "4",
@@ -861,7 +1017,7 @@ struct HelpSheet: View {
                     HelpStep(
                         number: "5",
                         title: "Generate and review / 生成并检查",
-                        detail: "Choose annotation colours, fonts, sizes, and positions. Then generate the PDF and check the review report before rehearsal.\n选择标注颜色、字体、大小和位置，然后生成 PDF，并在排练前检查"
+                        detail: "Choose annotation colours, fonts, sizes, and positions. Page DCA States can be Off, Header Only, Footer Only, or Header and Footer. Then generate the PDF and check the review report before rehearsal.\n选择标注颜色、字体、大小和位置。页面 DCA 状态可以关闭、仅显示在页眉、仅显示在页脚，或同时显示在页眉和页脚。然后生成 PDF，并在排练前检查复核报告。"
                     )
 
                     Divider()
@@ -871,7 +1027,7 @@ struct HelpSheet: View {
                             .font(.footnote.weight(.semibold))
                         Text("Licensed under GNU AGPL v3 or later / 使用 GNU AGPL v3 或更高版本许可")
                             .font(.footnote)
-                        Text("The exact source code and licences are included with every beta package. / 每个测试版均附带对应的完整源代码与许可文件。")
+                        Text("The exact source code and licences are included with every release package. / 每个发行版本均附带对应的完整源代码与许可文件。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -916,7 +1072,7 @@ struct StyleSection: View {
     let fonts: [String]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(title).font(.headline)
 
             PickerRow(title: "Colour", selection: $colour, options: colours)
@@ -932,18 +1088,20 @@ struct PickerRow: View {
     let options: [String]
 
     var body: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
                 .font(.body)
-                .lineLimit(1)
-                .frame(width: 260, alignment: .leading)
+                .lineLimit(2)
+                .frame(width: 155, alignment: .leading)
             Picker(title, selection: $selection) {
                 ForEach(options, id: \.self) { option in
                     Text(option).tag(option)
                 }
             }
             .labelsHidden()
-            .frame(width: 220)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(width: 155, alignment: .leading)
+            Spacer(minLength: 0)
         }
     }
 }

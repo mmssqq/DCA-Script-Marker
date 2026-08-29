@@ -5,21 +5,42 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SCHEME="DCA Script Marker"
-APP_VERSION="${DCA_VERSION:-0.9.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-2}"
+APP_VERSION="${DCA_VERSION:-1.0.0}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-5}"
+RELEASE_CHANNEL="${DCA_RELEASE_CHANNEL:-stable}"
 MINIMUM_MACOS_VERSION="${DCA_MINIMUM_MACOS:-12.0}"
+case "$RELEASE_CHANNEL" in
+    stable)
+        RELEASE_TAG="v$APP_VERSION"
+        VOLUME_NAME="DCA Script Marker"
+        DMG_IDENTIFIER="com.siqima.DCA-Script-Marker.dmg"
+        TESTING_DOCUMENT_NAME="TESTING_AND_SAFETY.md"
+        FEEDBACK_DOCUMENT_NAME="ISSUE_REPORT_TEMPLATE.md"
+        ;;
+    beta)
+        RELEASE_TAG="v$APP_VERSION-beta.$BUILD_NUMBER"
+        VOLUME_NAME="DCA Script Marker Beta"
+        DMG_IDENTIFIER="com.siqima.DCA-Script-Marker.beta-dmg"
+        TESTING_DOCUMENT_NAME="BETA_TESTING.md"
+        FEEDBACK_DOCUMENT_NAME="BETA_FEEDBACK_TEMPLATE.md"
+        ;;
+    *)
+        echo "DCA_RELEASE_CHANNEL must be stable or beta." >&2
+        exit 2
+        ;;
+esac
 BUILD_OUTPUT_ROOT="$REPOSITORY_ROOT/build"
 mkdir -p "$BUILD_OUTPUT_ROOT"
-RUN_ROOT="$(mktemp -d "$BUILD_OUTPUT_ROOT/private-beta.XXXXXX")"
-BUILD_WORK_ROOT="$(mktemp -d "${TMPDIR:-/private/tmp}/dca-private-beta-work.XXXXXX")"
+RUN_ROOT="$(mktemp -d "$BUILD_OUTPUT_ROOT/$RELEASE_CHANNEL-release.XXXXXX")"
+BUILD_WORK_ROOT="$(mktemp -d "${TMPDIR:-/private/tmp}/dca-$RELEASE_CHANNEL-release-work.XXXXXX")"
 DERIVED_DATA="$BUILD_WORK_ROOT/DerivedData"
 ENGINE_OUTPUT="$BUILD_WORK_ROOT/Engines"
 OUTPUT_DIRECTORY="$RUN_ROOT/Output"
 PACKAGE_ROOT="$RUN_ROOT/Package"
 APP_PATH="$PACKAGE_ROOT/DCA Script Marker.app"
-DMG_PATH="$OUTPUT_DIRECTORY/DCA-Script-Marker-v$APP_VERSION-beta.$BUILD_NUMBER-macOS.dmg"
-ZIP_PATH="$OUTPUT_DIRECTORY/DCA-Script-Marker-v$APP_VERSION-beta.$BUILD_NUMBER-macOS.zip"
-SOURCE_NAME="DCA-Script-Marker-v$APP_VERSION-beta.$BUILD_NUMBER-source"
+DMG_PATH="$OUTPUT_DIRECTORY/DCA-Script-Marker-$RELEASE_TAG-macOS.dmg"
+ZIP_PATH="$OUTPUT_DIRECTORY/DCA-Script-Marker-$RELEASE_TAG-macOS.zip"
+SOURCE_NAME="DCA-Script-Marker-$RELEASE_TAG-source"
 SOURCE_ARCHIVE="$OUTPUT_DIRECTORY/$SOURCE_NAME.zip"
 SOURCE_EXTRACT_ROOT="$BUILD_WORK_ROOT/SourceSnapshot"
 SOURCE_REPOSITORY_ROOT="$SOURCE_EXTRACT_ROOT/$SOURCE_NAME"
@@ -57,7 +78,7 @@ fi
 
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     if [[ -z "$NOTARY_PROFILE" ]]; then
-        echo "A shareable beta requires DCA_NOTARY_PROFILE for notarization." >&2
+        echo "A shareable release requires DCA_NOTARY_PROFILE for notarization." >&2
         exit 1
     fi
 
@@ -81,6 +102,7 @@ if [[ "$SIGNING_IDENTITY" != "-" ]]; then
 fi
 
 DCA_VERSION="$APP_VERSION" DCA_BUILD_NUMBER="$BUILD_NUMBER" \
+    DCA_RELEASE_CHANNEL="$RELEASE_CHANNEL" \
     "$SCRIPT_DIR/build_source_archive.sh" "$SOURCE_ARCHIVE"
 mkdir -p "$SOURCE_EXTRACT_ROOT"
 unzip -q "$SOURCE_ARCHIVE" -d "$SOURCE_EXTRACT_ROOT"
@@ -117,9 +139,10 @@ ditto \
 ditto "$TEMPLATE_PATH" \
     "$PACKAGE_ROOT/DCA Script Marker — DCA State Template.xlsx"
 ditto "$SOURCE_REPOSITORY_ROOT/README.md" "$PACKAGE_ROOT/README.md"
-ditto "$SOURCE_REPOSITORY_ROOT/BETA_TESTING.md" "$PACKAGE_ROOT/BETA_TESTING.md"
-ditto "$SOURCE_REPOSITORY_ROOT/BETA_FEEDBACK_TEMPLATE.md" \
-    "$PACKAGE_ROOT/BETA_FEEDBACK_TEMPLATE.md"
+ditto "$SOURCE_REPOSITORY_ROOT/TESTING_AND_SAFETY.md" \
+    "$PACKAGE_ROOT/$TESTING_DOCUMENT_NAME"
+ditto "$SOURCE_REPOSITORY_ROOT/ISSUE_REPORT_TEMPLATE.md" \
+    "$PACKAGE_ROOT/$FEEDBACK_DOCUMENT_NAME"
 ditto "$SOURCE_REPOSITORY_ROOT/PRIVACY.md" "$PACKAGE_ROOT/PRIVACY.md"
 ditto "$SOURCE_REPOSITORY_ROOT/RELEASE_NOTES.md" "$PACKAGE_ROOT/RELEASE_NOTES.md"
 ditto "$SOURCE_REPOSITORY_ROOT/LICENSE" "$PACKAGE_ROOT/LICENSE"
@@ -174,7 +197,7 @@ sign_disk_image() {
     codesign \
         --force \
         --timestamp \
-        --identifier "com.siqima.DCA-Script-Marker.beta-dmg" \
+        --identifier "$DMG_IDENTIFIER" \
         --sign "$SIGNING_IDENTITY" \
         "$1"
 }
@@ -279,7 +302,9 @@ if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     SIGNATURE_DESCRIPTION="$SIGNING_IDENTITY"
 fi
 {
-    printf 'DCA Script Marker %s beta %s\n' "$APP_VERSION" "$BUILD_NUMBER"
+    printf 'DCA Script Marker %s\n' "$APP_VERSION"
+    printf 'Build number: %s\n' "$BUILD_NUMBER"
+    printf 'Release channel: %s\n' "$RELEASE_CHANNEL"
     printf 'Minimum macOS: %s\n' "$MINIMUM_MACOS_VERSION"
     printf 'Architectures: arm64, x86_64\n'
     printf 'Signing: %s\n' "$SIGNATURE_DESCRIPTION"
@@ -295,7 +320,7 @@ if [[ -e "$PACKAGE_ROOT/$(basename "$SOURCE_ARCHIVE")" ]]; then
 fi
 
 if hdiutil create \
-    -volname "DCA Script Marker Beta" \
+    -volname "$VOLUME_NAME" \
     -srcfolder "$PACKAGE_ROOT" \
     -format UDZO \
     -ov \
@@ -303,7 +328,7 @@ if hdiutil create \
     PACKAGE_PATH="$DMG_PATH"
 else
     if [[ "$SIGNING_IDENTITY" != "-" || -n "$NOTARY_PROFILE" ]]; then
-        echo "Could not create the DMG required for the signed beta release." >&2
+        echo "Could not create the DMG required for the signed release." >&2
         exit 1
     fi
 
@@ -362,8 +387,8 @@ CHECKSUM_PATH="$OUTPUT_DIRECTORY/SHA256SUMS.txt"
         > "$(basename "$CHECKSUM_PATH")"
 )
 
-echo "Beta app: $APP_PATH"
-echo "Beta package: $PACKAGE_PATH"
+echo "Release app: $APP_PATH"
+echo "Release package: $PACKAGE_PATH"
 echo "Matching source archive: $SOURCE_ARCHIVE"
 echo "Release manifest: $OUTPUT_MANIFEST"
 echo "SHA-256 checksums: $CHECKSUM_PATH"

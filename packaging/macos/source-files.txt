@@ -7,8 +7,8 @@ THIRD_PARTY_NOTICES.md
 SOURCE.md
 CONTRIBUTING.md
 README.md
-BETA_TESTING.md
-BETA_FEEDBACK_TEMPLATE.md
+TESTING_AND_SAFETY.md
+ISSUE_REPORT_TEMPLATE.md
 PRIVACY.md
 RELEASE_NOTES.md
 USER_GUIDE.md
@@ -33,8 +33,13 @@ tests/test_cli_styles.py
 tests/test_matching.py
 tests/test_output_replacement.py
 tests/test_pdf_annotations.py
+tests/test_real_script_regression_runner.py
 tests/test_release_packaging.py
 tests/test_runtime_cli.py
+tests/real_script_regressions.example.json
+tools/__init__.py
+tools/run_real_script_regressions.py
+tools/render_user_guide.py
 packaging/macos/README.md
 packaging/macos/build-requirements.txt
 packaging/macos/build_engines.sh

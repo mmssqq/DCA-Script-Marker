@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DESTINATION="${1:-}"
 PYTHON_BIN="${DCA_BUILD_PYTHON:-/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11}"
-APP_VERSION="${DCA_VERSION:-0.9.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-2}"
+APP_VERSION="${DCA_VERSION:-1.0.0}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-5}"
 MINIMUM_MACOS_VERSION="${DCA_MINIMUM_MACOS:-12.0}"
 
 if [[ -z "$DESTINATION" ]]; then

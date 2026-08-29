@@ -1,4 +1,4 @@
-# DCA Script Marker beta feedback
+# DCA Script Marker issue report
 
 Please remove any confidential material before sending this report.
 
@@ -18,7 +18,7 @@ Please remove any confidential material before sending this report.
 - Workbook format: supplied horizontal / legacy vertical
 - Marking style:
 - Selected PDF page range, if any:
-- Header/footer enabled? Yes / No
+- DCA State page display: Off / Header Only / Footer Only / Header and Footer
 - Relevant colour, size, font, or position settings:
 
 ## What happened
@@ -39,4 +39,3 @@ Please remove any confidential material before sending this report.
 - Review report only when it contains no confidential material
 
 Never post a confidential full script or workbook to a public GitHub issue.
-

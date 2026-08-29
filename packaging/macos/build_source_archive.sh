@@ -7,9 +7,21 @@ export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_PATH="${1:-}"
-APP_VERSION="${DCA_VERSION:-0.9.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-2}"
-SOURCE_NAME="DCA-Script-Marker-v$APP_VERSION-beta.$BUILD_NUMBER-source"
+APP_VERSION="${DCA_VERSION:-1.0.0}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-5}"
+RELEASE_CHANNEL="${DCA_RELEASE_CHANNEL:-stable}"
+case "$RELEASE_CHANNEL" in
+    stable)
+        SOURCE_NAME="DCA-Script-Marker-v$APP_VERSION-source"
+        ;;
+    beta)
+        SOURCE_NAME="DCA-Script-Marker-v$APP_VERSION-beta.$BUILD_NUMBER-source"
+        ;;
+    *)
+        echo "DCA_RELEASE_CHANNEL must be stable or beta." >&2
+        exit 2
+        ;;
+esac
 SOURCE_FILE_LIST="$SCRIPT_DIR/source-files.txt"
 DEPENDENCY_LIST="$SCRIPT_DIR/source-dependencies.tsv"
 SOURCE_CACHE="${DCA_SOURCE_CACHE:-$REPOSITORY_ROOT/build/source-cache}"

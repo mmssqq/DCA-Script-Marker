@@ -1,10 +1,12 @@
+import json
+import re
 import sys
 import tempfile
 import unittest
-import re
 from pathlib import Path
 
 import fitz
+from openpyxl import Workbook
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +65,199 @@ def coloured_pixel_count(page, rect, expected):
 
 
 class PageStateAnnotationTests(unittest.TestCase):
+    def test_after_state_label_avoids_following_speaker_number(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((150, 100), "OPENING", fontsize=14)
+            page.insert_text((72, 122), "ORB.", fontsize=12)
+            page.insert_text((144, 122), "Chime together.", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+
+            marked_count, _, _ = marker.mark_pdf(
+                [{
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("OPENING"),
+                    "cue_speaker": "",
+                    "position": "after",
+                    "page_hint": "",
+                }],
+                {"scene 1": {"orb": "2"}},
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                    "position": "Left Gutter",
+                    "size": 17.4,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            annotation_rects = {}
+            for annotation in document[0].annots() or []:
+                content = annotation.info.get("content", "")
+                if content in {"Scene 1", "2"}:
+                    annotation_rects[content] = fitz.Rect(annotation.rect)
+            state_rect = annotation_rects["Scene 1"]
+            number_rect = annotation_rects["2"]
+
+            self.assertEqual(marked_count, 1)
+            self.assertFalse(state_rect.intersects(number_rect))
+            self.assertLessEqual(state_rect.x1 + 4, 150)
+            document.close()
+
+    def test_page_state_display_selects_header_footer_both_or_off(self):
+        expected_labels = {
+            "off": set(),
+            "header": {("Scene 1", "header")},
+            "footer": {("Scene 2", "footer")},
+            "both": {
+                ("Scene 1", "header"),
+                ("Scene 2", "footer"),
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 72), "FIRST", fontsize=12)
+            page.insert_text((72, 420), "SECOND", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("FIRST"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                },
+                {
+                    "name": "Scene 2",
+                    "key": "scene 2",
+                    "cue": marker.cue_match_key("SECOND"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                },
+            ]
+            assignments = {"scene 1": {}, "scene 2": {}}
+
+            for editable in (True, False):
+                for display, expected in expected_labels.items():
+                    with self.subTest(editable=editable, display=display):
+                        marked_pdf = temporary_path / (
+                            f"marked-{editable}-{display}.pdf"
+                        )
+                        marker.mark_pdf(
+                            states,
+                            assignments,
+                            str(source_pdf),
+                            str(marked_pdf),
+                            editable=editable,
+                            state_style={
+                                "font_name": "helv",
+                                "font_file": None,
+                                "page_state_display": display,
+                            },
+                        )
+
+                        document = fitz.open(marked_pdf)
+                        marked_page = document[0]
+                        actual = set()
+
+                        if editable:
+                            for annotation in marked_page.annots() or []:
+                                content = annotation.info.get("content", "")
+                                if content not in {"Scene 1", "Scene 2"}:
+                                    continue
+                                if annotation.rect.y1 < 50:
+                                    actual.add((content, "header"))
+                                elif (
+                                    annotation.rect.y0
+                                    > marked_page.rect.height - 50
+                                ):
+                                    actual.add((content, "footer"))
+                        else:
+                            for block in marked_page.get_text("dict")["blocks"]:
+                                for line in block.get("lines", []):
+                                    for span in line.get("spans", []):
+                                        content = span.get("text", "")
+                                        if content not in {"Scene 1", "Scene 2"}:
+                                            continue
+                                        if span["bbox"][3] < 50:
+                                            actual.add((content, "header"))
+                                        elif (
+                                            span["bbox"][1]
+                                            > marked_page.rect.height - 50
+                                        ):
+                                            actual.add((content, "footer"))
+
+                        document.close()
+                        self.assertEqual(actual, expected)
+
+    def test_current_state_is_not_announced_twice_for_repeated_cue_text(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 72), "ZEPHYR", fontsize=12)
+            page.insert_text(
+                (72, 110),
+                "Zephyr music continues.",
+                fontsize=12,
+            )
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 1",
+                "key": "scene 1",
+                "cue": marker.cue_match_key("ZEPHY"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            }]
+
+            _, _, activated_states = marker.mark_pdf(
+                states,
+                {"scene 1": {}},
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            state_labels = [
+                annotation
+                for annotation in document[0].annots() or []
+                if annotation.info.get("content") == "Scene 1"
+            ]
+            document.close()
+
+            self.assertEqual(len(state_labels), 1)
+            self.assertEqual(activated_states, {"scene 1"})
+
     def test_editable_header_footer_border_moves_with_text(self):
         state_colour = (0.0, 0.35, 0.75)
 
@@ -128,7 +323,6 @@ class PageStateAnnotationTests(unittest.TestCase):
             header.update()
             document.save(moved_pdf)
             document.close()
-
             moved_document = fitz.open(moved_pdf)
             moved_page = moved_document[0]
             moved_header = next(
@@ -543,6 +737,1539 @@ class PageStateAnnotationTests(unittest.TestCase):
                     5,
                 )
             document.close()
+
+
+class SpeakerRowAnnotationTests(unittest.TestCase):
+    def test_split_title_case_period_labels_require_trusted_columns(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 115, 50),
+                        ocr_line("Trio.", 72, 92, 100),
+                        ocr_line("Chime together.", 144, 220, 100),
+                        ocr_line("Orlena. 7", 72, 122, 140),
+                        ocr_line("A footnoted cue.", 144, 245, 140),
+                        ocr_line(
+                            "Vega, Orlena & Neris.",
+                            72,
+                            215,
+                            180,
+                        ),
+                        ocr_line("A shared cue.", 240, 330, 180),
+                        ocr_line("(TOVA drifts up and off.)", 220, 365, 220),
+                        ocr_line("Vega.", 180, 215, 260),
+                        ocr_line("Indented prose.", 240, 330, 260),
+                        ocr_line("Zane", 72, 100, 300),
+                        ocr_line("A trusted bare cue.", 126, 240, 300),
+                        ocr_line("Trio turns.", 72, 135, 340),
+                    ]
+                },
+                {
+                    "lines": [
+                        ocr_line("Tova.", 72, 105, 100),
+                        ocr_line("Inherited gutter cue.", 144, 275, 100),
+                        ocr_line("Tova.", 180, 213, 160),
+                        ocr_line("Body-column prose.", 240, 350, 160),
+                        ocr_line("Elara.", 72, 110, 220),
+                        ocr_line("Left-column dialogue.", 144, 252, 220),
+                        ocr_line("Zane.", 304, 338, 220),
+                        ocr_line("Parallel-column cue.", 376, 500, 220),
+                        ocr_line(
+                            "Vega & Tova. Is the prism ready?",
+                            72,
+                            285,
+                            260,
+                        ),
+                        ocr_line("Zane. Greetings.", 72, 145, 300),
+                    ]
+                },
+            ]
+            ocr_json.write_text(json.dumps(ocr_data), encoding="utf-8")
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                }
+            ]
+            assignments = {
+                "scene 1": {
+                    "trio": "2",
+                    "orlena": "1",
+                    "vega": "3",
+                    "zane": "4",
+                    "tova": "5",
+                    "neris": "6",
+                }
+            }
+
+            marked_count, unmatched_names, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            annotations_by_page_and_row = {}
+            document = fitz.open(marked_pdf)
+            for page_number, page in enumerate(document, start=1):
+                for annotation in page.annots() or []:
+                    content = annotation.info.get("content", "")
+                    if not re.fullmatch(r"\d+(?:/\d+)*", content):
+                        continue
+                    key = (page_number, round(annotation.rect.y0))
+                    annotations_by_page_and_row.setdefault(key, []).append(
+                        content
+                    )
+            document.close()
+
+            self.assertEqual(marked_count, 7)
+            self.assertEqual(annotations_by_page_and_row[(1, 100)], ["2"])
+            self.assertEqual(annotations_by_page_and_row[(1, 140)], ["1"])
+            self.assertEqual(
+                annotations_by_page_and_row[(1, 180)],
+                ["1/3/6"],
+            )
+            self.assertNotIn((1, 220), annotations_by_page_and_row)
+            self.assertNotIn((1, 260), annotations_by_page_and_row)
+            self.assertEqual(annotations_by_page_and_row[(1, 300)], ["4"])
+            self.assertNotIn((1, 340), annotations_by_page_and_row)
+            self.assertEqual(annotations_by_page_and_row[(2, 100)], ["5"])
+            self.assertNotIn((2, 160), annotations_by_page_and_row)
+            self.assertEqual(annotations_by_page_and_row[(2, 220)], ["4"])
+            self.assertEqual(
+                annotations_by_page_and_row[(2, 260)],
+                ["3/5"],
+            )
+            self.assertNotIn((2, 300), annotations_by_page_and_row)
+            self.assertEqual(unmatched_names, [])
+
+    def test_bold_title_case_prefix_marks_and_activates_speaker_cue(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            writer = fitz.TextWriter(page.rect)
+            regular = fitz.Font("helv")
+            bold = fitz.Font("hebo")
+            italic = fitz.Font("heit")
+
+            writer.append((72, 50), "START", font=regular, fontsize=12)
+            writer.append(
+                (72, 90),
+                "Lumen appears in the doorway.",
+                font=regular,
+                fontsize=12,
+            )
+            writer.append(
+                (72, 120),
+                "Lumen traces the circle.",
+                font=italic,
+                fontsize=12,
+            )
+            writer.append(
+                (72, 140),
+                "Orin and Selkie trace the circle.",
+                font=italic,
+                fontsize=12,
+            )
+
+            def append_dialogue(y, speaker, dialogue):
+                writer.append(
+                    (72, y),
+                    speaker,
+                    font=bold,
+                    fontsize=12,
+                )
+                speaker_right = 72 + bold.text_length(
+                    speaker,
+                    fontsize=12,
+                )
+                writer.append(
+                    (speaker_right + 2, y),
+                    f" {dialogue}",
+                    font=regular,
+                    fontsize=12,
+                )
+
+            append_dialogue(160, "Lumen", "O'bright.")
+
+            writer.append((72, 190), "Orin", font=bold, fontsize=12)
+            writer.append((98, 190), " and ", font=italic, fontsize=12)
+            writer.append((126, 190), "Selkie", font=bold, fontsize=12)
+
+            append_dialogue(220, "Branna", "Clouds drift.")
+            append_dialogue(260, "Vale Meridian", "The bell is nine.")
+            writer.write_text(page)
+            source.save(source_pdf)
+            source.close()
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                },
+                {
+                    "name": "Scene 2",
+                    "key": "scene 2",
+                    "cue": marker.cue_match_key("Clouds drift."),
+                    "cue_speaker": "branna",
+                    "position": "after",
+                    "page_hint": "",
+                },
+            ]
+            assignments = {
+                "scene 1": {
+                    "lumen": "1",
+                    "branna": "2",
+                    "orin": "4",
+                    "selkie": "5",
+                },
+                "scene 2": {"vale meridian": "3"},
+            }
+
+            marked_count, unmatched_names, activated_states = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            number_annotations = sorted(
+                annotation.info.get("content", "")
+                for annotation in document[0].annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            )
+            document.close()
+
+            self.assertEqual(marked_count, 4)
+            self.assertEqual(
+                number_annotations,
+                ["1", "2", "3", "4/5"],
+            )
+            self.assertEqual(activated_states, {"scene 1", "scene 2"})
+            self.assertEqual(unmatched_names, [])
+
+    def test_blank_tab_stop_fragments_do_not_bridge_speaker_columns(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 50), "START", fontsize=11)
+            for x, text in (
+                (125.9, " "),
+                (161.9, "SUN"),
+                (197.9, " "),
+                (233.9, " "),
+                (269.9, " "),
+                (305.9, " "),
+                (341.9, " "),
+                (377.9, " "),
+                (413.9, " "),
+                (449.9, "MOONS"),
+            ):
+                page.insert_text((x, 100), text, fontsize=11)
+            source.save(source_pdf)
+            source.close()
+
+            extracted_source = fitz.open(source_pdf)
+            extracted_lines = [
+                line
+                for block in extracted_source[0].get_text("dict")["blocks"]
+                for line in block.get("lines", [])
+            ]
+            blank_lines = [
+                line
+                for line in extracted_lines
+                if not "".join(
+                    span["text"] for span in line["spans"]
+                ).strip()
+            ]
+            extracted_source.close()
+            self.assertGreaterEqual(len(blank_lines), 8)
+
+            states = [{
+                "name": "Scene 100",
+                "key": "scene 100",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            }]
+            assignments = {
+                "scene 100": {
+                    "sun": "1",
+                    "moons": "2",
+                }
+            }
+
+            marked_count, _, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            marked_page = document[0]
+            annotations = sorted(
+                (
+                    annotation
+                    for annotation in marked_page.annots() or []
+                    if re.fullmatch(
+                        r"\d+(?:/\d+)*",
+                        annotation.info.get("content", ""),
+                    )
+                ),
+                key=lambda annotation: annotation.rect.x0,
+            )
+            annotation_contents = [
+                annotation.info["content"]
+                for annotation in annotations
+            ]
+            annotation_positions = [
+                (annotation.rect.x0, annotation.rect.y0)
+                for annotation in annotations
+            ]
+            document.close()
+
+            self.assertEqual(marked_count, 2)
+            self.assertEqual(annotation_contents, ["1", "2"])
+            self.assertAlmostEqual(
+                annotation_positions[0][1],
+                annotation_positions[1][1],
+                places=1,
+            )
+            self.assertGreater(
+                annotation_positions[1][0] - annotation_positions[0][0],
+                200,
+            )
+
+    def test_continued_group_and_right_column_labels(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 50), "START", fontsize=11)
+
+            for x, y, text in (
+                (161.9, 100, "SUN"),
+                (449.9, 100, "MOONS"),
+                (161.9, 150, "ZED (CONTINUED)"),
+                (305.9, 150, "STARWEAVERS (CONTINUED)"),
+                (197.9, 200, "ZED"),
+                (377.9, 200, "ORB"),
+                (233.9, 250, "ZED AND ORB"),
+                (377.9, 300, "QUASAR"),
+            ):
+                page.insert_text((x, y), text, fontsize=11)
+
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 100",
+                "key": "scene 100",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            }]
+            assignments = {
+                "scene 100": {
+                    "sun": "1",
+                    "moons": "2",
+                    "orb": "3",
+                    "zed": "4",
+                    "starweavers": "7",
+                    "quasar": "8",
+                }
+            }
+
+            marked_count, _, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            marked_page = document[0]
+            annotations = [
+                annotation
+                for annotation in marked_page.annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            ]
+            contents = sorted(
+                annotation.info["content"]
+                for annotation in annotations
+            )
+            quasar_positions = [
+                annotation.rect.x0
+                for annotation in annotations
+                if annotation.info.get("content") == "8"
+            ]
+            document.close()
+
+            self.assertEqual(marked_count, 8)
+            self.assertEqual(
+                contents,
+                ["1", "2", "3", "3/4", "4", "4", "7", "8"],
+            )
+            self.assertEqual(len(quasar_positions), 1)
+            self.assertGreater(quasar_positions[0], 300)
+
+    def test_synthetic_header_page_hint_activates_first_state(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            source.new_page(width=612, height=792)
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 36), "MOON TEST", fontsize=11)
+            page.insert_text((260, 36), "9/99/99", fontsize=11)
+            page.insert_text((510, 36), "1", fontsize=11)
+            page.insert_text(
+                (72, 90),
+                "Scene l - SKYWARD/INWARD THE DOME",
+                fontsize=11,
+            )
+            page.insert_text((233.9, 140), "VOYAGER", fontsize=11)
+            page.insert_text((161.9, 190), "SUN", fontsize=11)
+            page.insert_text((449.9, 190), "MOONS", fontsize=11)
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 100",
+                "key": "scene 100",
+                "cue": marker.cue_match_key(
+                    "Scene l - SKYWARD/INWARD THE DOME"
+                ),
+                "cue_speaker": "",
+                "position": "after",
+                "page_hint": "1",
+            }]
+            assignments = {
+                "scene 100": {
+                    "voyager": ["1", "2"],
+                    "sun": "1",
+                    "moons": "2",
+                }
+            }
+
+            marked_count, _, activated_states = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            page_number_contents = []
+            for marked_page in document:
+                page_number_contents.append(sorted(
+                    annotation.info.get("content", "")
+                    for annotation in marked_page.annots() or []
+                    if re.fullmatch(
+                        r"\d+(?:/\d+)*",
+                        annotation.info.get("content", ""),
+                    )
+                ))
+            document.close()
+
+            self.assertEqual(marked_count, 3)
+            self.assertEqual(activated_states, {"scene 100"})
+            self.assertEqual(page_number_contents[0], [])
+            self.assertEqual(page_number_contents[1], ["1", "1/2", "2"])
+
+    def test_same_row_state_heading_fragments_activate_once(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            # Word can draw these as one visible heading while exposing the
+            # Roman numeral and title as independent same-baseline lines.
+            ocr_data = [{
+                "lines": [
+                    # The title words also appear in earlier prose. Without
+                    # the Roman numeral this must not activate the state.
+                    ocr_line(
+                        "星官——巡守七色云工坊",
+                        72,
+                        260,
+                        100,
+                    ),
+                    ocr_line("星官", 72, 102, 140),
+                    ocr_line("这是虚构介绍。", 136, 220, 140),
+                    ocr_line("I.", 77, 94, 293),
+                    ocr_line("七色云工坊", 108, 186, 293),
+                    ocr_line("星官", 72, 102, 350),
+                    ocr_line("亮了?", 136, 178, 350),
+                    ocr_line("4", 518, 526, 792),
+                ]
+            }]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [{
+                "name": "Scene 1",
+                "key": "scene 1",
+                "cue": marker.cue_match_key("I. 七色云工坊"),
+                "cue_speaker": "",
+                "position": "after",
+                "page_hint": "4",
+            }]
+
+            marked_count, _, activated_states = marker.mark_pdf(
+                states,
+                {"scene 1": {"星官": "1"}},
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            annotations = [
+                annotation.info.get("content", "")
+                for annotation in document[0].annots() or []
+            ]
+            document.close()
+
+            self.assertEqual(marked_count, 1)
+            self.assertEqual(activated_states, {"scene 1"})
+            self.assertEqual(annotations.count("Scene 1"), 1)
+            self.assertEqual(annotations.count("1"), 1)
+
+    def test_cast_track_cues_mark_without_narration_or_table_names(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 110, 50),
+                        ocr_line("【A】阿澜：早安。", 90, 220, 100),
+                        ocr_line(
+                            "【A/B】阿澜、诺星河（接上）：数星星。",
+                            90,
+                            330,
+                            140,
+                        ),
+                        ocr_line(
+                            "星芽、云豆和月铃草从水晶门出来。",
+                            200,
+                            430,
+                            180,
+                        ),
+                        ocr_line("【A】阿澜进入星舱。", 90, 240, 220),
+                        # A genuine later cue may switch back to an ordinary
+                        # bare label and must remain supported.
+                        ocr_line("阿澜", 90, 120, 260),
+                        ocr_line("NEXT", 90, 140, 300),
+                    ]
+                },
+                {
+                    "lines": [
+                        ocr_line("附录：虚构角色表", 72, 190, 50),
+                        ocr_line("轨道分配", 72, 140, 90),
+                        # A role-table cell is not a spoken cue.
+                        ocr_line("阿澜", 143, 170, 130),
+                    ]
+                },
+            ]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                },
+                {
+                    "name": "Scene 2",
+                    "key": "scene 2",
+                    "cue": marker.cue_match_key("NEXT"),
+                    "cue_speaker": "阿澜",
+                    "position": "before",
+                    "page_hint": "",
+                },
+            ]
+            assignments = {
+                "scene 1": {
+                    "阿澜": "1",
+                    "诺星河": "2",
+                    "星芽": "3",
+                    "云豆": "4",
+                    "月铃草": "5",
+                },
+                "scene 2": {"阿澜": "9"},
+            }
+
+            marked_count, _, activated_states = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            numbers = sorted(
+                annotation.info.get("content", "")
+                for page in document
+                for annotation in page.annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            )
+            document.close()
+
+            self.assertEqual(marked_count, 3)
+            self.assertEqual(numbers, ["1", "1", "1/2"])
+            self.assertEqual(
+                activated_states,
+                {"scene 1", "scene 2"},
+            )
+
+    def test_mixed_style_spans_keep_speaker_dialogue_boundary(self):
+        fragments = [
+            {
+                "bbox": (90, 321.98, 252, 335.95),
+                "spans": [
+                    {
+                        "text": "林星遥",
+                        "bbox": (90, 321.98, 126, 335.95),
+                    },
+                    {
+                        "text": "今晚云层，闪着银光！",
+                        "bbox": (132, 321.98, 252, 335.95),
+                    },
+                ],
+            }
+        ]
+
+        visual_text = marker.join_visual_line_fragments(
+            fragments,
+            {"林星遥"},
+        )
+
+        self.assertEqual(visual_text, "林星遥 今晚云层，闪着银光！")
+        self.assertEqual(
+            marker.get_speaker_names(visual_text, {"林星遥"}),
+            ["林星遥"],
+        )
+        self.assertTrue(
+            marker.looks_like_speaker_label(visual_text, "林星遥")
+        )
+
+        existing_space_text = marker.join_visual_line_fragments(
+            [
+                {
+                    "bbox": (90, 350, 114, 364),
+                    "spans": [
+                        {
+                            "text": "云舟 ",
+                            "bbox": (90, 350, 114, 364),
+                        }
+                    ],
+                },
+                {
+                    "bbox": (154, 350, 252, 364),
+                    "spans": [
+                        {
+                            "text": "下一段讯号",
+                            "bbox": (154, 350, 252, 364),
+                        }
+                    ],
+                },
+            ],
+            set(),
+        )
+        self.assertEqual(existing_space_text, "云舟 下一段讯号")
+
+    def test_fragmented_chinese_speaker_label_activates_next_state(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            # Some WPS-generated scripts store a bold speaker name, a trailing
+            # digit, and the following dialogue as three separate PDF lines on
+            # the same visual baseline. Small gaps belong inside the speaker
+            # name; the larger gap before dialogue must remain a boundary.
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 110, 50),
+                        ocr_line("星港卫兵", 90, 138, 100),
+                        ocr_line("2", 141, 148.2, 100),
+                        ocr_line(
+                            "队长说了，只找那颗发蓝的星星，其他光点别动。",
+                            160.2,
+                            430,
+                            100,
+                        ),
+                        ocr_line("陆星野", 90, 126, 150),
+                        ocr_line("看哪里？！", 138, 220, 150),
+                        ocr_line("星", 90, 102, 200),
+                        ocr_line("岚", 114, 126, 200),
+                        ocr_line("大家看星图。", 138, 230, 200),
+                        ocr_line("【陆星野走进舱室】", 90, 230, 250),
+                    ]
+                }
+            ]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [
+                {
+                    "name": "S50",
+                    "key": "s50",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                },
+                {
+                    "name": "S51",
+                    "key": "s51",
+                    "cue": marker.cue_match_key("只找那颗发蓝的星星，"),
+                    "cue_speaker": "星港卫兵2",
+                    "position": "after",
+                    "page_hint": "",
+                },
+            ]
+            assignments = {
+                "s50": {"星港卫兵2": "7"},
+                "s51": {"陆星野": "2", "星岚": "8"},
+            }
+
+            marked_count, _, activated_states = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            page = document[0]
+            annotations = [
+                annotation
+                for annotation in page.annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            ]
+            by_row = {
+                y: [
+                    annotation.info["content"]
+                    for annotation in annotations
+                    if abs(annotation.rect.y0 - y) < 1
+                ]
+                for y in (100, 150, 200, 250)
+            }
+            document.close()
+
+            self.assertEqual(marked_count, 3)
+            self.assertEqual(activated_states, {"s50", "s51"})
+            self.assertEqual(by_row[100], ["7"])
+            self.assertEqual(by_row[150], ["2"])
+            self.assertEqual(by_row[200], ["8"])
+            self.assertEqual(by_row[250], [])
+
+    def test_chinese_groups_and_indented_dialogue_are_disambiguated(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 110, 50),
+                        ocr_line("云洛：开场。", 72, 180, 100),
+                        ocr_line("星米娅：回应。", 72, 190, 140),
+                        ocr_line("云洛和月卡拉：一起唱。", 72, 260, 180),
+                        ocr_line("星米娅和月卡拉：（唱）", 72, 270, 220),
+                        ocr_line(
+                            "星米娅、月卡拉，和云洛 （唱）：",
+                            72,
+                            320,
+                            260,
+                        ),
+                        ocr_line(
+                            "星米娅，我看见蓝色流星了。",
+                            144,
+                            340,
+                            300,
+                        ),
+                        ocr_line("星米娅。", 180, 240, 340),
+                        ocr_line(
+                            "云洛，你能过来跟我一起看星吗？",
+                            144,
+                            360,
+                            380,
+                        ),
+                        # A no-colon cue remains valid when it is aligned with
+                        # the trusted speaker column established above.
+                        ocr_line("星米娅。", 72, 132, 420),
+                        # A short comma suffix can describe delivery rather
+                        # than addressed dialogue, as in ``云洛，合唱``.
+                        ocr_line("云洛，合唱", 260, 340, 460),
+                        ocr_line("【星米娅走进舱室】", 72, 220, 500),
+                    ]
+                }
+            ]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                }
+            ]
+            assignments = {
+                "scene 1": {
+                    "月卡拉": "1",
+                    "云洛": "2",
+                    "星米娅": "3",
+                }
+            }
+
+            marked_count, unmatched_names, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            page = document[0]
+            annotations = [
+                annotation
+                for annotation in page.annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            ]
+            by_row = {
+                y: [
+                    annotation.info["content"]
+                    for annotation in annotations
+                    if abs(annotation.rect.y0 - y) < 1
+                ]
+                for y in (
+                    100,
+                    140,
+                    180,
+                    220,
+                    260,
+                    300,
+                    340,
+                    380,
+                    420,
+                    460,
+                    500,
+                )
+            }
+            document.close()
+
+            self.assertEqual(marked_count, 7)
+            self.assertEqual(by_row[100], ["2"])
+            self.assertEqual(by_row[140], ["3"])
+            self.assertEqual(by_row[180], ["1/2"])
+            self.assertEqual(by_row[220], ["1/3"])
+            self.assertEqual(by_row[260], ["1/2/3"])
+            self.assertEqual(by_row[300], [])
+            self.assertEqual(by_row[340], [])
+            self.assertEqual(by_row[380], [])
+            self.assertEqual(by_row[420], ["3"])
+            self.assertEqual(by_row[460], ["2"])
+            self.assertEqual(by_row[500], [])
+            self.assertEqual(unmatched_names, [])
+
+    def test_full_stop_label_can_inherit_the_previous_page_column(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 110, 50),
+                        ocr_line("云洛：开场。", 72, 180, 100),
+                    ]
+                },
+                {
+                    "lines": [
+                        ocr_line("月卡拉：另一栏。", 300, 430, 100),
+                        ocr_line("星米娅。", 72, 132, 160),
+                        ocr_line("星米娅。", 180, 240, 220),
+                    ]
+                },
+            ]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                }
+            ]
+            assignments = {
+                "scene 1": {
+                    "月卡拉": "1",
+                    "云洛": "2",
+                    "星米娅": "3",
+                }
+            }
+
+            marked_count, _, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            rows = {}
+            for page_number, page in enumerate(document, start=1):
+                for annotation in page.annots() or []:
+                    content = annotation.info.get("content", "")
+                    if re.fullmatch(r"\d+(?:/\d+)*", content):
+                        rows[
+                            (page_number, round(annotation.rect.y0))
+                        ] = content
+            document.close()
+
+            self.assertEqual(marked_count, 3)
+            self.assertEqual(rows[(1, 100)], "2")
+            self.assertEqual(rows[(2, 100)], "1")
+            self.assertEqual(rows[(2, 160)], "3")
+            self.assertNotIn((2, 220), rows)
+
+    def test_close_speaker_columns_split_without_splitting_shared_labels(self):
+        def ocr_line(text, x0, x1, y):
+            return {
+                "text": text,
+                "bbox": [x0, y, x1 - x0, 13],
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            ocr_json = temporary_path / "ocr.json"
+
+            source = fitz.open()
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            ocr_data = [
+                {
+                    "lines": [
+                        ocr_line("START", 72, 110, 50),
+                        ocr_line("ZEV.", 133.05, 156.52, 100),
+                        ocr_line(
+                            "VOR/STARKEEP/ (BACKGROUND)",
+                            216.33,
+                            299.90,
+                            100,
+                        ),
+                        ocr_line("LUX.", 349.16, 372.63, 100),
+                        ocr_line("RYNN.", 443.12, 466.59, 100),
+                        ocr_line("VELA &", 100, 145, 160),
+                        ocr_line("QUASARWISP.", 195, 260, 160),
+                        ocr_line("VELOR.", 100, 140, 220),
+                        ocr_line("PAXEN, signal.", 190, 280, 220),
+                        ocr_line("(LUX enters)", 100, 180, 280),
+                    ]
+                }
+            ]
+            ocr_json.write_text(
+                json.dumps(ocr_data),
+                encoding="utf-8",
+            )
+
+            states = [
+                {
+                    "name": "S104",
+                    "key": "s104",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                }
+            ]
+            assignments = {
+                "s104": {
+                    "zev": "5",
+                    "vor": "3",
+                    "starkeep": "4",
+                    "lux": "2",
+                    "rynn": "1",
+                    "vela": "6",
+                    "quasarwisp": "7",
+                    "velor": "8",
+                    "paxen": "9",
+                }
+            }
+
+            marked_count, _, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                ocr_json_file=str(ocr_json),
+            )
+
+            document = fitz.open(marked_pdf)
+            page = document[0]
+            annotations = [
+                annotation
+                for annotation in page.annots() or []
+                if re.fullmatch(
+                    r"\d+(?:/\d+)*",
+                    annotation.info.get("content", ""),
+                )
+            ]
+            by_row = {
+                y: [
+                    annotation.info["content"]
+                    for annotation in sorted(
+                        annotations,
+                        key=lambda item: item.rect.x0,
+                    )
+                    if abs(annotation.rect.y0 - y) < 1
+                ]
+                for y in (100, 160, 220, 280)
+            }
+            annotation_contents = [
+                annotation.info["content"] for annotation in annotations
+            ]
+            document.close()
+
+            self.assertEqual(marked_count, 6)
+            self.assertEqual(by_row[100], ["5", "3/4", "2", "1"])
+            self.assertEqual(by_row[160], ["6/7"])
+            self.assertEqual(by_row[220], ["8"])
+            self.assertEqual(by_row[280], [])
+            self.assertNotIn("9", annotation_contents)
+
+
+class ReviewSafetyWarningTests(unittest.TestCase):
+    def setUp(self):
+        self.states = [
+            {
+                "name": "Scene 1",
+                "key": "scene 1",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            },
+            {
+                "name": "Scene 2",
+                "key": "scene 2",
+                "cue": marker.cue_match_key("NEXT"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            },
+        ]
+        self.assignments = {
+            "scene 1": {"lyria": "1", "vexel": "2"},
+            "scene 2": {"lyria": "3"},
+        }
+
+    def notice_codes(self, *args, **kwargs):
+        return {
+            notice["code"]
+            for notice in marker.build_review_notices(*args, **kwargs)
+        }
+
+    def test_high_risk_failures_are_deduplicated(self):
+        no_states = marker.build_review_notices(
+            [], {}, 0, set(), diagnostics={"full_document": True}
+        )
+        self.assertEqual(
+            [notice["code"] for notice in no_states],
+            ["NO_STATES_CONFIGURED"],
+        )
+
+        no_activation = marker.build_review_notices(
+            self.states,
+            self.assignments,
+            0,
+            set(),
+            diagnostics={"full_document": True},
+        )
+        self.assertEqual(
+            [notice["code"] for notice in no_activation],
+            ["NO_STATES_ACTIVATED"],
+        )
+        self.assertEqual(no_activation[0]["severity"], "critical")
+
+        first_missing = self.notice_codes(
+            self.states,
+            self.assignments,
+            1,
+            {"scene 2"},
+            diagnostics={
+                "full_document": True,
+                "marked_pages": [16],
+            },
+        )
+        self.assertEqual(first_missing, {"FIRST_STATE_NOT_ACTIVATED"})
+
+    def test_zero_mark_warning_respects_legend_and_partial_exports(self):
+        full_notices = marker.build_review_notices(
+            self.states[:1],
+            self.assignments,
+            0,
+            {"scene 1"},
+            diagnostics={"full_document": True},
+        )
+        self.assertEqual(full_notices[0]["code"], "ZERO_CUES_MARKED")
+        self.assertEqual(full_notices[0]["severity"], "critical")
+
+        partial_notices = marker.build_review_notices(
+            self.states[:1],
+            self.assignments,
+            0,
+            {"scene 1"},
+            diagnostics={"full_document": False},
+        )
+        self.assertEqual(partial_notices[0]["code"], "ZERO_CUES_MARKED")
+        self.assertEqual(partial_notices[0]["severity"], "warning")
+
+        legend_notices = marker.build_review_notices(
+            self.states[:1],
+            self.assignments,
+            0,
+            {"scene 1"},
+            diagnostics={"full_document": True},
+            legend_only=True,
+        )
+        self.assertEqual(legend_notices, [])
+
+    def test_sparse_long_script_does_not_trigger_a_density_warning(self):
+        notices = marker.build_review_notices(
+            self.states[:1],
+            self.assignments,
+            1,
+            {"scene 1"},
+            diagnostics={
+                "full_document": True,
+                "pdf_page_count": 100,
+                "state_activation_pages": {"scene 1": 1},
+                "marked_pages": [1],
+                "known_speakers_without_active_assignment": [],
+            },
+        )
+        self.assertEqual(notices, [])
+
+    def test_name_only_placeholder_rows_do_not_trigger_a_warning(self):
+        codes = self.notice_codes(
+            self.states[:1],
+            self.assignments,
+            1,
+            {"scene 1"},
+            diagnostics={
+                "full_document": True,
+                "named_states_without_cues": ["Scene 108", "Scene 109"],
+            },
+        )
+        self.assertEqual(codes, set())
+
+        configured_codes = self.notice_codes(
+            self.states[:1],
+            self.assignments,
+            1,
+            {"scene 1"},
+            diagnostics={
+                "full_document": True,
+                "assignment_states_without_start_cues": ["scene 108"],
+            },
+        )
+        self.assertEqual(
+            configured_codes,
+            {"ASSIGNMENTS_WITHOUT_START_CUES"},
+        )
+
+    def test_positioned_unassigned_speaker_flags_incomplete_final_state(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 50), "START", fontsize=11)
+            page.insert_text((100, 100), "LYRIA:", fontsize=11)
+            page.insert_text((72, 150), "NEXT", fontsize=11)
+            page.insert_text((100, 200), "VEXEL", fontsize=11)
+            page.insert_text(
+                (100, 250),
+                "VEXEL traces the stars.",
+                fontsize=11,
+                fontname="heit",
+            )
+            page.insert_text((100, 275), "(VEXEL glides)", fontsize=11)
+            source.save(source_pdf)
+            source.close()
+
+            diagnostics = {}
+            result = marker.mark_pdf(
+                self.states,
+                self.assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+                diagnostics=diagnostics,
+            )
+
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0], 1)
+            self.assertEqual(
+                diagnostics["known_speakers_without_active_assignment"],
+                [{
+                    "page": 1,
+                    "state": "scene 2",
+                    "speakers": ["vexel"],
+                    "label": "VEXEL",
+                }],
+            )
+
+            notices = marker.build_review_notices(
+                self.states,
+                self.assignments,
+                result[0],
+                result[2],
+                diagnostics=diagnostics,
+            )
+            final_state_notice = next(
+                notice
+                for notice in notices
+                if notice["code"]
+                == "POSSIBLE_INCOMPLETE_FINAL_STATE"
+            )
+            self.assertIn("PDF page 1", final_state_notice["message"])
+            self.assertIn("Scene 2", final_state_notice["message"])
+            self.assertIn("vexel", final_state_notice["message"])
+
+            report_file = temporary_path / "review.txt"
+            marker.write_review_report(
+                self.states,
+                result[0],
+                result[1],
+                result[2],
+                str(report_file),
+                notices=notices,
+                diagnostics=diagnostics,
+            )
+            report = report_file.read_text(encoding="utf-8")
+            self.assertIn(
+                "Scene 2 | vexel | PDF page(s) 1 | 1 label(s) | "
+                "Example: VEXEL",
+                report,
+            )
+
+    def test_report_places_safety_summary_before_detail_lists(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            report_file = Path(temporary_directory) / "review.txt"
+            notices = [{
+                "code": "ZERO_CUES_MARKED",
+                "severity": "critical",
+                "message": "No DCA numbers were placed.",
+            }]
+            marker.write_review_report(
+                self.states,
+                0,
+                [(1, "scene 1", "VEXEL")],
+                {"scene 1"},
+                str(report_file),
+                notices=notices,
+                diagnostics={"marked_pages": []},
+            )
+            report = report_file.read_text(encoding="utf-8")
+
+            self.assertLess(
+                report.index("Automatic safety check"),
+                report.index("Possible character names"),
+            )
+            self.assertIn("Status: REVIEW REQUIRED", report)
+            self.assertIn("Human review is always required", report)
+
+    def test_run_marker_writes_structured_completion_result(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            template_file = temporary_path / "template.xlsx"
+            output_folder = temporary_path / "output"
+            result_file = temporary_path / "result.json"
+            output_folder.mkdir()
+
+            source = fitz.open()
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 50), "START", fontsize=11)
+            page.insert_text((100, 100), "LYRIA:", fontsize=11)
+            source.save(source_pdf)
+            source.close()
+
+            workbook = Workbook()
+            worksheet = workbook.active
+            worksheet.title = "DCA States"
+            worksheet.append([
+                "DCA State",
+                "Start Line Text",
+                "State Start Position",
+                "DCA 1",
+            ])
+            worksheet.append(["Scene 1", "START", "Before", "LYRIA"])
+            workbook.save(template_file)
+            workbook.close()
+
+            completion = {}
+            marked_count, output_pdf, review_report = marker.run_marker(
+                str(template_file),
+                str(source_pdf),
+                str(output_folder),
+                editable=True,
+                result_json_file=str(result_file),
+                result_data=completion,
+            )
+            saved_result = json.loads(
+                result_file.read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(marked_count, 1)
+            self.assertEqual(saved_result, completion)
+            self.assertEqual(saved_result["schema_version"], 1)
+            self.assertEqual(saved_result["safety_level"], "ok")
+            self.assertEqual(saved_result["safety_warnings"], [])
+            self.assertEqual(saved_result["activated_states"], ["scene 1"])
+            self.assertEqual(saved_result["missing_states"], [])
+            self.assertEqual(
+                saved_result["state_activation_pages"],
+                {"scene 1": 1},
+            )
+            self.assertEqual(saved_result["marked_pages"], [1])
+            self.assertEqual(saved_result["marked_page_counts"], {"1": 1})
+            self.assertEqual(saved_result["marked_cue_counts"], [{
+                "page": 1,
+                "state": "scene 1",
+                "speakers": ["lyria"],
+                "dca": "1",
+                "count": 1,
+            }])
+            self.assertEqual(saved_result["pdf_page_count"], 1)
+            self.assertEqual(saved_result["output_pdf"], output_pdf)
+            self.assertEqual(saved_result["review_report"], review_report)
+            self.assertTrue(Path(output_pdf).exists())
+            self.assertTrue(Path(review_report).exists())
 
 
 if __name__ == "__main__":

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "example_chinese_colon",
+      "label": "Example Chinese colon labels",
+      "suites": [
+        "smoke",
+        "full"
+      ],
+      "script": "Example Production/clean-script.pdf",
+      "template": "Example Production/DCA.xlsx",
+      "arguments": [],
+      "assertions": {
+        "required_mark_pages": [
+          2
+        ],
+        "forbidden_mark_pages": [
+          1
+        ],
+        "required_text": [
+          {
+            "page": 2,
+            "text": "1"
+          }
+        ],
+        "required_cue_marks": [
+          {
+            "page": 2,
+            "state": "scene 1",
+            "speakers": [
+              "角色甲"
+            ],
+            "dca": "1",
+            "exact_count": 1
+          }
+        ]
+      }
+    }
+  ]
+}

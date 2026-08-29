@@ -1,6 +1,6 @@
-# macOS beta packaging
+# macOS release packaging
 
-The beta is one Universal macOS app. Its Swift interface contains both Intel
+The release is one Universal macOS app. Its Swift interface contains both Intel
 and Apple Silicon code. Internally it contains one self-contained marker engine
 for each processor and automatically launches the correct engine.
 
@@ -18,11 +18,12 @@ for local testing.
 The local build normally creates a DMG. If disk-image services are unavailable
 in a protected build environment, it falls back to a ZIP for local verification.
 Shareable Developer ID builds deliberately require the DMG workflow.
-The app, helper engines, package filename, and checksum all use the same beta
-version and build number. Override them with `DCA_VERSION` and
-`DCA_BUILD_NUMBER` when preparing a later beta.
+The app, helper engines, package filename, and checksum all use the same
+version and build number. Stable release naming is the default. Override
+`DCA_VERSION`, `DCA_BUILD_NUMBER`, and `DCA_RELEASE_CHANNEL` (`stable` or
+`beta`) when preparing another release.
 
-## Shareable beta
+## Shareable release
 
 In Xcode, open **Settings → Accounts**, select the paid team, choose
 **Manage Certificates**, and add a `Developer ID Application` certificate.
@@ -40,6 +41,7 @@ After both items are available in Keychain, run:
 ```sh
 DCA_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 DCA_NOTARY_PROFILE="DCA Script Marker Notary" \
+DCA_RELEASE_CHANNEL="stable" \
 ./packaging/macos/build_private_beta.sh
 ```
 
@@ -50,8 +52,8 @@ nested code, verifies portability, creates a DMG, submits it for notarization,
 and staples the accepted ticket. It then runs a Gatekeeper assessment and
 creates basename-only SHA-256 checksums.
 
-The DMG includes the app, the finalized bilingual DCA State template, public
-beta instructions, privacy information, release notes, feedback template, and
+The DMG includes the app, the finalized bilingual DCA State template, testing
+and safety instructions, privacy information, release notes, issue-report template, and
 licence files. The exact matching corresponding-source ZIP is published beside
 the DMG as a separate GitHub Release asset. Keeping it outside the DMG prevents
 Apple's notarization service from treating development binaries preserved in
@@ -76,9 +78,9 @@ The finalized template is never edited in place. The release workflow removes
 only Excel's optional developer-machine absolute-path metadata from its staged
 copy; workbook content and formatting remain unchanged.
 
-Beta 2 targets macOS 12 Monterey or later. Its notarized DMG has passed physical
-installation, launch, marked-PDF generation, and review-report generation on
-Intel macOS 12.7.6; Apple Silicon Monterey 12.x remains unverified. Override
-the deployment target only for compatibility experiments with
+Version 1.0.0 targets macOS 12 Monterey or later. The preceding notarized
+release candidate passed physical installation, launch, marked-PDF generation,
+and review-report generation on Intel macOS 12.7.6; Apple Silicon Monterey
+12.x remains unverified. Override the deployment target only for compatibility experiments with
 `DCA_MINIMUM_MACOS`; a release must still pass the bundled metadata and Mach-O
 minimum-version checks.
