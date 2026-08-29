@@ -40,7 +40,9 @@ only** 始终使用 PDF 顺序页码，不要填写剧本内印刷页码。混�
 1. Open the supplied DMG.
 2. Drag **DCA Script Marker** to **Applications**.
 3. Open the app from Applications.
-4. Confirm that **About DCA Script Marker** shows the expected version.
+4. Eject the DMG, select **User Guide** at the upper-left, and confirm that the
+   complete bilingual PDF manual opens from the installed app.
+5. Confirm that **About DCA Script Marker** shows the expected version.
 
 The public DMG is signed and notarized by Apple. If macOS says the app
 cannot be verified, stop and report the exact message rather than bypassing the

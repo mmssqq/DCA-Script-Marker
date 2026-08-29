@@ -1,6 +1,6 @@
 # Release notes
 
-## 1.0.0 (build 6) — first stable release
+## 1.0.0 (build 7) — first stable release
 
 DCA Script Marker 1.0.0 is the first stable GitHub release. It is a local,
 Universal macOS app for theatre sound teams and supports macOS 12 Monterey or
@@ -23,6 +23,8 @@ Homebrew, or Xcode.
   assignments, and known speakers without an active assignment
 - Shows a dedicated bilingual stop warning when no dialogue DCA numbers are
   added, with direct access to the output folder and review report
+- Adds an upper-left User Guide button that opens the complete bilingual PDF
+  manual bundled inside the installed app, even after the DMG is ejected
 - Provides editable annotations in all three user-facing modes: full marking,
   first appearance only, and DCA State legends
 - Offers Header Only, Footer Only, Header and Footer, or Off, with independent
@@ -34,7 +36,7 @@ Homebrew, or Xcode.
 
 ### Verification before publication
 
-- 81 automated engine, interface-contract, template, regression-runner, and
+- 82 automated engine, interface-contract, template, regression-runner, and
   release-packaging tests pass
 - Regression coverage exercises thousands of dialogue cues and dozens of
   configured states across varied script layouts; source scripts and workbooks

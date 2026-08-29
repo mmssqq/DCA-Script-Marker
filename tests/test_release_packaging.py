@@ -44,7 +44,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertEqual(project.count("MACOSX_DEPLOYMENT_TARGET = 12.0;"), 2)
         self.assertNotIn("MACOSX_DEPLOYMENT_TARGET = 13.0;", project)
-        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 6;"), 2)
+        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 7;"), 2)
         self.assertEqual(project.count("MARKETING_VERSION = 1.0.0;"), 2)
         self.assertNotIn("path(percentEncoded: false)", content_view)
 
@@ -52,7 +52,7 @@ class ReleasePackagingTests(unittest.TestCase):
             self.assertIn('DCA_MINIMUM_MACOS:-12.0', build_script)
 
         for build_script in (app_builder, engine_builder, source_builder):
-            self.assertIn('DCA_BUILD_NUMBER:-6', build_script)
+            self.assertIn('DCA_BUILD_NUMBER:-7', build_script)
             self.assertIn('DCA_VERSION:-1.0.0', build_script)
         for release_script in (app_builder, source_builder):
             self.assertIn('DCA_RELEASE_CHANNEL:-stable', release_script)
@@ -155,6 +155,66 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("重要页码规则", pdf_text)
         self.assertIn("If no dialogue DCA numbers are added", pdf_text)
         self.assertIn("如果没有添加任何对白 DCA 编号", pdf_text)
+
+    def test_installed_app_bundles_and_opens_the_full_user_guide(self):
+        guide_pdf = (
+            PROJECT_ROOT
+            / "output"
+            / "pdf"
+            / "START HERE - User Guide - 使用手册.pdf"
+        )
+        project = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "DCA Script Marker.xcodeproj"
+            / "project.pbxproj"
+        ).read_text(encoding="utf-8")
+        content_view = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "DCA Script Marker"
+            / "ContentView.swift"
+        ).read_text(encoding="utf-8")
+        verifier = (PACKAGING_ROOT / "verify_beta_app.sh").read_text(
+            encoding="utf-8"
+        )
+        allowlist = (PACKAGING_ROOT / "source-files.txt").read_text(
+            encoding="utf-8"
+        )
+
+        with fitz.open(guide_pdf) as document:
+            self.assertEqual(document.page_count, 6)
+            guide_text = "\n".join(page.get_text() for page in document)
+        self.assertIn("DCA Script Marker User Guide", guide_text)
+        self.assertIn("中文使用手册", guide_text)
+        self.assertIn(
+            'Label("User Guide", systemImage: "book.closed")',
+            content_view,
+        )
+        self.assertIn(
+            'forResource: "START HERE - User Guide - 使用手册"',
+            content_view,
+        )
+        self.assertIn("NSWorkspace.shared.open(guideURL)", content_view)
+        self.assertIn("User guide unavailable", content_view)
+        self.assertIn(
+            "START HERE - User Guide - 使用手册.pdf in Resources",
+            project,
+        )
+        self.assertIn(
+            '../../output/pdf/START HERE - User Guide - 使用手册.pdf',
+            project,
+        )
+        self.assertIn(
+            "Contents/Resources/START HERE - User Guide - 使用手册.pdf",
+            verifier,
+        )
+        self.assertIn(
+            "output/pdf/START HERE - User Guide - 使用手册.pdf",
+            allowlist,
+        )
 
     def test_macos_version_comparison_executes(self):
         verifier = PACKAGING_ROOT / "verify_beta_app.sh"

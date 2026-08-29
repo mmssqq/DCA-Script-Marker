@@ -81,8 +81,15 @@ struct ContentView: View {
         VStack(spacing: 22) {
             ZStack {
                 HStack {
-                    Spacer()
+                    Button {
+                        openUserGuide()
+                    } label: {
+                        Label("User Guide", systemImage: "book.closed")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Open the complete bilingual PDF user guide / 打开完整双语 PDF 使用手册")
 
+                    Spacer()
 
                     Button {
                         showHelp = true
@@ -329,6 +336,27 @@ struct ContentView: View {
         return panel.runModal() == .OK
             ? panel.url?.path ?? ""
             : ""
+    }
+
+    private func openUserGuide() {
+        guard let guideURL = Bundle.main.url(
+            forResource: "START HERE - User Guide - 使用手册",
+            withExtension: "pdf"
+        ), NSWorkspace.shared.open(guideURL) else {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = (
+                "User guide unavailable / 无法打开使用手册"
+            )
+            alert.informativeText = """
+            The complete bilingual PDF user guide could not be opened. Please reinstall DCA Script Marker from the official release DMG.
+
+            无法打开完整的双语 PDF 使用手册。请从官方发行版 DMG 重新安装 DCA Script Marker。
+            """
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
     }
 
     func loadLegendEditor() {

@@ -6,8 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A7B6C5D4302F100000000001 /* START HERE - User Guide - 使用手册.pdf in Resources */ = {isa = PBXBuildFile; fileRef = A7B6C5D4302F100000000002 /* START HERE - User Guide - 使用手册.pdf */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		048EF050302C974C007CFEC8 /* DCA Script Marker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DCA Script Marker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A7B6C5D4302F100000000002 /* START HERE - User Guide - 使用手册.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; name = "START HERE - User Guide - 使用手册.pdf"; path = "../../output/pdf/START HERE - User Guide - 使用手册.pdf"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +37,7 @@
 		048EF047302C974C007CFEC8 = {
 			isa = PBXGroup;
 			children = (
+				A7B6C5D4302F100000000002 /* START HERE - User Guide - 使用手册.pdf */,
 				048EF052302C974C007CFEC8 /* DCA Script Marker */,
 				048EF051302C974C007CFEC8 /* Products */,
 			);
@@ -109,6 +115,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A7B6C5D4302F100000000001 /* START HERE - User Guide - 使用手册.pdf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -252,7 +259,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = YULNYKR45T;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -284,7 +291,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = YULNYKR45T;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;

@@ -54,8 +54,14 @@ State on the wrong page.
 **Mark selected pages only** 始终使用 PDF 顺序页码。混淆两种页码可能造成页面没有
 标注，或 DCA 状态在错误页面启动。
 
-Read the complete bilingual [User Guide / 使用手册](USER_GUIDE.md). A printable
-PDF copy is also placed prominently inside every release DMG.
+Use the **User Guide** button at the upper-left of the installed app to open
+the complete bilingual PDF manual at any time, even after the DMG is ejected.
+A second printable copy is also placed prominently inside every release DMG.
+The Markdown [User Guide / 使用手册](USER_GUIDE.md) is available in the source.
+
+使用已安装软件左上角的 **User Guide** 按钮，可随时打开完整的双语 PDF 使用手册，即使
+DMG 已经推出也可以使用。每个发行版 DMG 内还会放置一份便于复制或打印的手册；源代码
+中同时提供 Markdown 格式的 [User Guide / 使用手册](USER_GUIDE.md)。
 
 ## Safety and limitations / 安全说明与限制
 

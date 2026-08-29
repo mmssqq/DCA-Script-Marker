@@ -45,8 +45,10 @@ and workbook.
    normally read-only.
 4. Rename your copied workbook if useful, for example
    `My Show - DCA States.xlsx`.
-5. Open the app from Applications. The menu item **Help** opens a short guide
-   inside the app.
+5. Open the app from Applications. The **User Guide** button at the upper-left
+   opens the complete bilingual PDF manual bundled inside the installed app,
+   so it remains available after the DMG is ejected. The **Help** button at the
+   upper-right, and the Help menu item, open a shorter guide inside the app.
 
 The matching source archive, licence, privacy notice, release notes, and this
 manual are included with or supplied beside each release.
@@ -256,7 +258,9 @@ LibreOffice 对该模板的兼容性。
 3. 将 DMG 内附带的 Excel 模板复制到您自己的演出或项目文件夹。不要直接编辑挂载在
    DMG 里的模板，因为 DMG 通常是只读的。
 4. 可以将复制出的文件改名，例如 `我的演出 - DCA States.xlsx`。
-5. 从 Applications 打开软件。菜单中的 **Help** 可以打开软件内的简短说明。
+5. 从 Applications 打开软件。左上角的 **User Guide** 按钮会打开已内置在软件中的完整
+   双语 PDF 使用手册，因此推出 DMG 后仍然可以使用。右上角的 **Help** 按钮及菜单中的
+   Help 项目会打开软件内的简短说明。
 
 每个发行版本都会同时提供对应的源代码压缩包、许可证、隐私说明、发行说明和本手册。
 

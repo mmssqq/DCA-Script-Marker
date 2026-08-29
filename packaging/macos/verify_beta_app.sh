@@ -65,6 +65,7 @@ INTEL_ENGINE_APP="$APP_PATH/Contents/Helpers/DCAEngine-x86_64.app"
 ARM_ENGINE="$ARM_ENGINE_APP/Contents/MacOS/DCAEngine"
 INTEL_ENGINE="$INTEL_ENGINE_APP/Contents/MacOS/DCAEngine"
 LICENSE_ROOT="$APP_PATH/Contents/Resources/Licenses"
+USER_GUIDE_PDF="$APP_PATH/Contents/Resources/START HERE - User Guide - 使用手册.pdf"
 
 for bundle_path in "$APP_PATH" "$ARM_ENGINE_APP" "$INTEL_ENGINE_APP"; do
     bundle_minimum="$({
@@ -124,6 +125,12 @@ while IFS= read -r -d '' candidate; do
         fi
     done <<< "$minimum_versions"
 done < <(find "$APP_PATH" -type f -print0)
+
+if [[ ! -s "$USER_GUIDE_PDF" \
+    || "$(head -c 5 "$USER_GUIDE_PDF")" != "%PDF-" ]]; then
+    echo "The app is missing its bundled PDF user guide." >&2
+    exit 1
+fi
 
 for license_file in LICENSE LICENSING.md THIRD_PARTY_NOTICES.md SOURCE.md; do
     if [[ ! -s "$LICENSE_ROOT/$license_file" ]]; then
