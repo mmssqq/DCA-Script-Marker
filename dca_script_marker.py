@@ -3166,7 +3166,9 @@ def build_review_notices(
             "NO_STATES_ACTIVATED",
             "critical" if full_document else "warning",
             "No DCA State start cue was found in the selected script pages, "
-            "so no state-based marking could be verified.",
+            "so no state-based marking could be verified. Confirm that the "
+            "PDF text is selectable and check the exact Start Line Text, "
+            "Start Line Character, and Page Hint.",
         )
     else:
         first_state = states[0]
@@ -3181,7 +3183,10 @@ def build_review_notices(
                 "FIRST_STATE_NOT_ACTIVATED",
                 "warning",
                 f'The first configured state, "{first_state["name"]}", '
-                f"was not activated.{page_detail} Early pages may be unmarked.",
+                f"was not activated.{page_detail} Early pages may be unmarked. "
+                "Check that Page Hint uses the printed script page number "
+                "when one is printed, and otherwise the sequential PDF page "
+                "position.",
             )
 
         if full_document:
@@ -3209,7 +3214,9 @@ def build_review_notices(
             "ZERO_CUES_MARKED",
             "critical" if full_document else "warning",
             "A DCA State was activated, but no dialogue DCA numbers were "
-            "placed. Check speaker names and assignments before use.",
+            "placed. The speaker-label layout may not be recognised, or "
+            "script names and aliases may not match the workbook's DCA "
+            "assignments. Confirm that the PDF text is selectable before use.",
         )
 
     cues_without_names = diagnostics.get(
@@ -3263,9 +3270,12 @@ def build_review_notices(
         add_notice(
             "PAGE_HINT_MISMATCH",
             "warning",
-            "Exact Start Cue Text was found on a different PDF page for "
-            f"{len(page_hint_mismatches)} DCA State(s). Correct or clear "
-            "the Page Hint in the DCA State template. Examples: "
+            "Exact Start Cue Text was found at a different sequential PDF "
+            f"page position for {len(page_hint_mismatches)} DCA State(s). "
+            "Page Hint normally uses the number printed inside the script; "
+            "use the PDF page position only when no printed number exists. "
+            "Correct the Page Hint, or leave it blank only when the cue text "
+            "is unique. Examples: "
             f'{"; ".join(examples)}.',
         )
 
@@ -3770,12 +3780,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--start-page",
         type=int,
-        help="First PDF page to mark (optional)",
+        help="First sequential PDF file page to mark (cover is page 1)",
     )
     parser.add_argument(
         "--end-page",
         type=int,
-        help="Last PDF page to mark (optional)",
+        help="Last sequential PDF file page to mark (optional)",
     )
     parser.add_argument(
         "--style",

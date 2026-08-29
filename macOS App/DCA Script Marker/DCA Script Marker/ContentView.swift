@@ -156,6 +156,13 @@ struct ContentView: View {
                     }
                     .textFieldStyle(.roundedBorder)
                 }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Important: Excel Page Hint normally uses the page number printed inside the script. A selected-page range always uses the PDF viewer's page position, counting the cover as page 1.")
+                    Text("重要：Excel 的 Page Hint 通常填写剧本页面内印刷的页码；“只标注指定页码”始终使用 PDF 阅读器中的页面位置，并从封面作为第 1 页开始计算。")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 10) {
@@ -438,6 +445,50 @@ struct ContentView: View {
         }
     }
 
+    private func showZeroDCANumbersAlert(_ result: MarkerCompletionResult) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = (
+            "No DCA numbers were added / 未添加任何 DCA 编号"
+        )
+        alert.informativeText = """
+        No dialogue DCA numbers were added. Do not use this output until you have checked the original PDF, completed workbook, and review report.
+
+        Possible causes include a blank or incomplete workbook with no usable DCA States or assignments, a scanned/image-only PDF, an unrecognised speaker-label layout, character names or DCA assignments that do not match, or a Start Line Text/Page Hint that did not activate the intended state.
+
+        Page numbers are not interchangeable: Excel Page Hint normally uses the number printed inside the script; use the PDF page position only when no printed page number exists. A selected-page range always uses the PDF viewer's page position, counting the cover as page 1.
+
+        没有添加任何对白 DCA 编号。请先核对原始 PDF、已填写的工作簿和复核报告，勿直接使用此输出。
+
+        可能原因包括：工作簿仍为空白或没有可用的 DCA 状态及分配、PDF 为扫描版或纯图片、软件尚未识别该角色标签排版、角色名称或 DCA 分配不一致，或 Start Line Text / Page Hint 未能启动正确的状态。
+
+        两种页码不能混用：Excel 的 Page Hint 通常填写剧本页面内印刷的页码；只有没有印刷页码时才使用 PDF 页面位置。“只标注指定页码”始终使用 PDF 阅读器中的页面位置，并从封面作为第 1 页开始计算。
+        """
+        alert.addButton(withTitle: "Show Output Folder")
+        alert.addButton(withTitle: "Open Review Report")
+        alert.addButton(withTitle: "Try Another PDF")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            let outputFolder = URL(
+                fileURLWithPath: result.outputPDF
+            ).deletingLastPathComponent()
+            NSWorkspace.shared.open(outputFolder)
+        case .alertSecondButtonReturn:
+            NSWorkspace.shared.open(
+                URL(fileURLWithPath: result.reviewReport)
+            )
+        case .alertThirdButtonReturn:
+            let replacementPath = chooseFile(allowedTypes: ["pdf"])
+            if !replacementPath.isEmpty {
+                scriptPath = replacementPath
+                message = "A new script PDF is selected. Check the workbook and generate again."
+            }
+        default:
+            break
+        }
+    }
+
     private func showSafetyUnavailableAlert() {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -594,6 +645,7 @@ struct ContentView: View {
         }
         let replacingExistingPDF = outputMode == "replace"
             && FileManager.default.fileExists(atPath: markedOutputURL().path)
+        let generationStyle = selectedStyle
         isGenerating = true
         message = "Creating your marked script…"
 
@@ -625,7 +677,7 @@ struct ContentView: View {
                 "--output", outputFolder,
                 "--output-mode", outputMode,
                 "--result-json-file", resultFile.path,
-                "--style", selectedStyle,
+                "--style", generationStyle,
                 "--number-colour", numberColour.lowercased(),
                 "--number-scale", scale(for: numberSize),
                 "--number-font", numberFont,
@@ -682,7 +734,10 @@ struct ContentView: View {
                             message = result
                         }
                         if let completionResult {
-                            if completionResult.safetyLevel != "ok" {
+                            if completionResult.markedCount == 0
+                                && generationStyle != "DCA State Legend" {
+                                showZeroDCANumbersAlert(completionResult)
+                            } else if completionResult.safetyLevel != "ok" {
                                 showSafetyAlert(completionResult)
                             }
                         } else {
@@ -997,7 +1052,7 @@ struct HelpSheet: View {
                     HelpStep(
                         number: "1",
                         title: "Complete the DCA State template / 完成 DCA 状态表",
-                        detail: "Copy the included Excel template from the DMG into your project folder. Add every dialogue character to Character List, then enter each state, start cue, start position, page hint, and DCA assignment in DCA States. Save the completed copy before choosing it in the app.\n先把 DMG 内附带的 Excel 模板复制到项目文件夹。在 Character List 填写所有对白角色，再在 DCA States 填写状态、起始提示、开始位置、页码提示和 DCA 分配。保存完成的副本后再在软件中选择。"
+                        detail: "Copy the included Excel template from the DMG into your project folder. Add every dialogue character to Character List, then enter each state, start cue, start position, Page Hint, and DCA assignment in DCA States. For Page Hint, normally use the page number printed inside the script; use the PDF page position only when no printed page number exists. Save the completed copy before choosing it in the app.\n先把 DMG 内附带的 Excel 模板复制到项目文件夹。在 Character List 填写所有对白角色，再在 DCA States 填写状态、起始提示、开始位置、Page Hint 和 DCA 分配。Page Hint 通常填写剧本页面内印刷的页码；只有没有印刷页码时，才使用 PDF 页面位置。保存完成的副本后再在软件中选择。"
                     )
                     HelpStep(
                         number: "2",
@@ -1012,12 +1067,12 @@ struct HelpSheet: View {
                     HelpStep(
                         number: "4",
                         title: "Optional: mark only selected pages / 可选：只标注指定页码",
-                        detail: "Turn on Mark selected pages only and enter the first and last PDF page when you are preparing only part of a script.\n当只需要处理剧本的一部分时，打开此选项并输入 PDF 的起始和结束页码。"
+                        detail: "Turn on Mark selected pages only when preparing only part of a script. This range always uses the PDF viewer's page position, counting the cover as page 1. It may differ from the page number printed inside the script.\n当只需要处理剧本的一部分时，打开此选项。这里始终使用 PDF 阅读器中的页面位置，并从封面作为第 1 页开始计算；它可能与剧本页面内印刷的页码不同。"
                     )
                     HelpStep(
                         number: "5",
                         title: "Generate and review / 生成并检查",
-                        detail: "Choose annotation colours, fonts, sizes, and positions. Page DCA States can be Off, Header Only, Footer Only, or Header and Footer. Then generate the PDF and check the review report before rehearsal.\n选择标注颜色、字体、大小和位置。页面 DCA 状态可以关闭、仅显示在页眉、仅显示在页脚，或同时显示在页眉和页脚。然后生成 PDF，并在排练前检查复核报告。"
+                        detail: "Choose annotation colours, fonts, sizes, and positions. Page DCA States can be Off, Header Only, Footer Only, or Header and Footer. Then generate the PDF and check the review report before rehearsal. If no DCA numbers are added, do not use the output; check the PDF text, layout, workbook names, state cue, and Page Hint.\n选择标注颜色、字体、大小和位置。页面 DCA 状态可以关闭、仅显示在页眉、仅显示在页脚，或同时显示在页眉和页脚。然后生成 PDF，并在排练前检查复核报告。如果没有添加任何 DCA 编号，请勿使用该输出，并检查 PDF 文字与排版、工作簿角色名称、状态提示和 Page Hint。"
                     )
 
                     Divider()

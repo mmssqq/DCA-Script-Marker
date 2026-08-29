@@ -24,7 +24,7 @@ Please remove any confidential material before sending this report.
 ## What happened
 
 - DCA State or scene:
-- PDF page number:
+- Sequential PDF page position (count the cover as page 1):
 - Printed script page number, if different:
 - Speaker or cue:
 - Expected result:

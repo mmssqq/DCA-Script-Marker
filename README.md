@@ -33,6 +33,13 @@ Apple 芯片 Mac 尚未单独验证。使用者无需安装 Python、Homebrew �
 5. Choose a marking style, select **Generate Marked Script**, and review both
    the marked PDF and the generated review report.
 
+**Important page-number rule:** Excel **Page Hint** normally uses the page
+number printed inside the script. If that page has no printed number, use the
+sequential PDF page position shown by the viewer, counting the cover as PDF
+page 1. **Mark selected pages only** always uses the sequential PDF page
+position. Confusing these numbers can leave pages unmarked or activate a DCA
+State on the wrong page.
+
 1. 从 GitHub Release 下载 `macOS.dmg`，打开后将 **DCA Script Marker** 拖入
    **Applications（应用程序）**。
 2. **打开软件前，请先把 DMG 内附带的 Excel DCA 状态模板复制到您自己的项目文件夹。
@@ -41,6 +48,11 @@ Apple 芯片 Mac 尚未单独验证。使用者无需安装 Python、Homebrew �
    `DCA States` 的第 5 行开始每行填写一个 DCA 状态。
 4. 保存完成的 `.xlsx`。在软件中依次选择该 Excel、原始文字版剧本 PDF 和输出文件夹。
 5. 选择标注方式，点击 **Generate Marked Script**，并同时检查标注 PDF 和复核报告。
+
+**重要页码规则：** Excel 的 **Page Hint** 通常填写剧本页面内印刷的页码；如果该页
+没有印刷页码，再填写 PDF 阅读器显示的顺序页码，并从封面作为 PDF 第 1 页开始计算。
+**Mark selected pages only** 始终使用 PDF 顺序页码。混淆两种页码可能造成页面没有
+标注，或 DCA 状态在错误页面启动。
 
 Read the complete bilingual [User Guide / 使用手册](USER_GUIDE.md). A printable
 PDF copy is also placed prominently inside every release DMG.
@@ -59,6 +71,15 @@ handling and [RELEASE_NOTES.md](RELEASE_NOTES.md) for release details.
 排练或正式演出前，音响团队成员必须将每份导出的剧本与原始 PDF、已填写的 DCA 表格
 及复核报告进行人工核对。支持范围、限制和检查步骤请参阅
 [Testing and safety](TESTING_AND_SAFETY.md)。所有剧本和表格均在本机处理，不会上传。
+
+If the app reports that **no DCA numbers were added**, do not use that output.
+The PDF may be image-only, its speaker-label layout may not yet be recognised,
+the workbook names or assignments may not match, or a state cue/Page Hint may
+be wrong. Open the review report and correct the setup before trying again.
+
+如果软件提示**未添加任何 DCA 编号**，请勿直接使用该输出。原因可能是 PDF 为纯图片、
+软件尚未识别该角色标签排版、工作簿名称或分配不一致，或状态提示/Page Hint 填写错误。
+请打开复核报告并修正设置后再重新生成。
 
 ## Current capabilities / 主要功能
 

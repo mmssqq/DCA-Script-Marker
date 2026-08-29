@@ -44,7 +44,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertEqual(project.count("MACOSX_DEPLOYMENT_TARGET = 12.0;"), 2)
         self.assertNotIn("MACOSX_DEPLOYMENT_TARGET = 13.0;", project)
-        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 5;"), 2)
+        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 6;"), 2)
         self.assertEqual(project.count("MARKETING_VERSION = 1.0.0;"), 2)
         self.assertNotIn("path(percentEncoded: false)", content_view)
 
@@ -52,7 +52,7 @@ class ReleasePackagingTests(unittest.TestCase):
             self.assertIn('DCA_MINIMUM_MACOS:-12.0', build_script)
 
         for build_script in (app_builder, engine_builder, source_builder):
-            self.assertIn('DCA_BUILD_NUMBER:-5', build_script)
+            self.assertIn('DCA_BUILD_NUMBER:-6', build_script)
             self.assertIn('DCA_VERSION:-1.0.0', build_script)
         for release_script in (app_builder, source_builder):
             self.assertIn('DCA_RELEASE_CHANNEL:-stable', release_script)
@@ -112,6 +112,49 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("Install the app and copy the template", pdf_text)
         self.assertIn("安装软件并复制模板", pdf_text)
         self.assertIn("Version 1.0.0", pdf_text)
+
+    def test_zero_mark_and_page_number_safety_copy_is_bundled(self):
+        guide_pdf = (
+            PROJECT_ROOT
+            / "output"
+            / "pdf"
+            / "START HERE - User Guide - 使用手册.pdf"
+        )
+        content_view = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "DCA Script Marker"
+            / "ContentView.swift"
+        ).read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (PROJECT_ROOT / "USER_GUIDE.md").read_text(encoding="utf-8")
+        testing = (PROJECT_ROOT / "TESTING_AND_SAFETY.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("No DCA numbers were added", content_view)
+        self.assertIn("未添加任何 DCA 编号", content_view)
+        self.assertIn('withTitle: "Try Another PDF"', content_view)
+        self.assertIn("let generationStyle = selectedStyle", content_view)
+        self.assertIn("completionResult.markedCount == 0", content_view)
+        self.assertIn(
+            'generationStyle != "DCA State Legend"',
+            content_view,
+        )
+        for document in (readme, guide, testing):
+            self.assertIn("Important page-number rule", document)
+            self.assertIn("Page Hint", document)
+            self.assertIn("Mark selected pages only", document)
+            self.assertIn("PDF", document)
+        self.assertIn("重要页码规则", readme)
+        self.assertIn("重要页码规则", guide)
+        with fitz.open(guide_pdf) as document:
+            pdf_text = "\n".join(page.get_text() for page in document)
+        self.assertIn("Important page-number rule", pdf_text)
+        self.assertIn("重要页码规则", pdf_text)
+        self.assertIn("If no dialogue DCA numbers are added", pdf_text)
+        self.assertIn("如果没有添加任何对白 DCA 编号", pdf_text)
 
     def test_macos_version_comparison_executes(self):
         verifier = PACKAGING_ROOT / "verify_beta_app.sh"

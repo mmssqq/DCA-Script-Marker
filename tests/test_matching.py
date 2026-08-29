@@ -400,6 +400,14 @@ class StateMatchingTests(unittest.TestCase):
         )
 
         self.assertEqual(mismatch_notice["severity"], "warning")
+        self.assertIn(
+            "sequential PDF page position",
+            mismatch_notice["message"],
+        )
+        self.assertIn(
+            "number printed inside the script",
+            mismatch_notice["message"],
+        )
         self.assertIn("Fixture State A", mismatch_notice["message"])
         self.assertIn("PDF page 33", mismatch_notice["message"])
         self.assertIn("Page Hint 35", mismatch_notice["message"])

@@ -20,6 +20,21 @@ Scanned/image-only PDFs, password-protected PDFs, and digitally signed PDFs
 are not supported in this release. Do not overwrite a production copy of a
 script; keep the original PDF and workbook unchanged.
 
+## Important page-number rule
+
+Excel **Page Hint** normally means the page number printed inside the script.
+If that page has no printed number, use the sequential PDF page position shown
+by the viewer, counting the cover as PDF page 1. **Mark selected pages only**
+always uses the sequential PDF page position, never the printed script page.
+Confusing these numbers can prevent a state from activating, activate a
+repeated cue on the wrong page, leave early pages unmarked, or continue the
+previous state's assignments.
+
+Excel 的 **Page Hint** 通常填写剧本页面内印刷的页码；如果该页没有印刷页码，再填写
+PDF 阅读器显示的顺序页码，并从封面作为 PDF 第 1 页开始计算。**Mark selected pages
+only** 始终使用 PDF 顺序页码，不要填写剧本内印刷页码。混淆两种页码可能导致状态
+无法启动、重复提示在错误页面启动、前面页面没有标注，或继续使用上一状态的分配。
+
 ## Install the release
 
 1. Open the supplied DMG.
@@ -53,6 +68,10 @@ the release.
 7. Check the review report for missing states and unexpected speaker names.
 8. Generate a short sample with **Header Only**, **Footer Only**, and **Off**;
    confirm that no label appears in a location you disabled.
+9. Confirm the first relevant page and every state transition use the intended
+   DCA assignment. If no DCA numbers are added, do not use the output; open the
+   review report and check selectable text, speaker-label layout, names,
+   assignments, the first state cue, and Page Hint.
 
 When changing annotation settings, **Save as New PDF** is recommended. If you
 choose Replace, close the existing marked PDF in Preview before replacing it;
@@ -73,7 +92,8 @@ Please include:
 - DCA Script Marker version and build number
 - Mac model, Intel or Apple Silicon, and macOS version
 - Marking style and relevant appearance settings
-- PDF page number and DCA State where the issue appears
+- Sequential PDF page position, printed script page number, and DCA State where
+  the issue appears
 - What you expected and what happened
 - Whether closing and reopening the PDF changed the result
 - The review report, only if it contains no confidential material

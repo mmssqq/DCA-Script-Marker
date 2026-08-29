@@ -1,6 +1,6 @@
 # Release notes
 
-## 1.0.0 (build 5) — first stable release
+## 1.0.0 (build 6) — first stable release
 
 DCA Script Marker 1.0.0 is the first stable GitHub release. It is a local,
 Universal macOS app for theatre sound teams and supports macOS 12 Monterey or
@@ -17,8 +17,12 @@ Homebrew, or Xcode.
 - Protects stage directions from being treated as dialogue labels
 - Uses strict Page Hint matching and reports the exact cue page when an
   unresolved state conflicts with its configured hint
+- Clearly distinguishes printed script Page Hint values from sequential PDF
+  page positions used by selected-page exports
 - Adds automatic safety warnings for missing states, zero marks, incomplete
   assignments, and known speakers without an active assignment
+- Shows a dedicated bilingual stop warning when no dialogue DCA numbers are
+  added, with direct access to the output folder and review report
 - Provides editable annotations in all three user-facing modes: full marking,
   first appearance only, and DCA State legends
 - Offers Header Only, Footer Only, Header and Footer, or Off, with independent
@@ -30,7 +34,7 @@ Homebrew, or Xcode.
 
 ### Verification before publication
 
-- 79 automated engine, interface-contract, template, regression-runner, and
+- 81 automated engine, interface-contract, template, regression-runner, and
   release-packaging tests pass
 - Regression coverage exercises thousands of dialogue cues and dozens of
   configured states across varied script layouts; source scripts and workbooks
@@ -48,6 +52,9 @@ Homebrew, or Xcode.
 
 - Every exported script must be compared with the original PDF, completed DCA
   workbook, and review report before rehearsal or performance
+- If no dialogue DCA numbers are added, the output must not be used; check the
+  PDF text/layout, workbook names and assignments, first state cue, and Page
+  Hint before regenerating
 - Scanned/image-only, password-protected, and digitally signed PDFs are not
   supported
 - Unusual columns, rotated text, tight margins, or nonstandard speaker layouts

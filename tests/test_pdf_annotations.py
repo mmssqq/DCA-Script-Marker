@@ -2030,6 +2030,9 @@ class ReviewSafetyWarningTests(unittest.TestCase):
         )
         self.assertEqual(full_notices[0]["code"], "ZERO_CUES_MARKED")
         self.assertEqual(full_notices[0]["severity"], "critical")
+        self.assertIn("speaker-label layout", full_notices[0]["message"])
+        self.assertIn("names and aliases", full_notices[0]["message"])
+        self.assertIn("PDF text is selectable", full_notices[0]["message"])
 
         partial_notices = marker.build_review_notices(
             self.states[:1],
@@ -2050,6 +2053,63 @@ class ReviewSafetyWarningTests(unittest.TestCase):
             legend_only=True,
         )
         self.assertEqual(legend_notices, [])
+
+    def test_zero_mark_completion_result_and_report_are_critical(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            template_file = temporary_path / "template.xlsx"
+            output_folder = temporary_path / "output"
+            result_file = temporary_path / "result.json"
+            output_folder.mkdir()
+
+            source = fitz.open()
+            page = source.new_page(width=612, height=792)
+            page.insert_text((72, 50), "START", fontsize=11)
+            page.insert_text((100, 100), "VEXEL:", fontsize=11)
+            page.insert_text((150, 100), "Nothing is assigned.", fontsize=11)
+            source.save(source_pdf)
+            source.close()
+
+            workbook = Workbook()
+            worksheet = workbook.active
+            worksheet.title = "DCA States"
+            worksheet.append([
+                "DCA State",
+                "Start Line Text",
+                "State Start Position",
+                "DCA 1",
+            ])
+            worksheet.append(["Scene 1", "START", "Before", "LYRIA"])
+            workbook.save(template_file)
+            workbook.close()
+
+            completion = {}
+            marked_count, _, review_report = marker.run_marker(
+                str(template_file),
+                str(source_pdf),
+                str(output_folder),
+                editable=True,
+                result_json_file=str(result_file),
+                result_data=completion,
+            )
+            saved_result = json.loads(
+                result_file.read_text(encoding="utf-8")
+            )
+            report = Path(review_report).read_text(encoding="utf-8")
+
+            self.assertEqual(marked_count, 0)
+            self.assertEqual(saved_result, completion)
+            self.assertEqual(saved_result["safety_level"], "critical")
+            self.assertIn(
+                "ZERO_CUES_MARKED",
+                {
+                    warning["code"]
+                    for warning in saved_result["safety_warnings"]
+                },
+            )
+            self.assertIn("Marked character cues: 0", report)
+            self.assertIn("speaker-label layout", report)
 
     def test_sparse_long_script_does_not_trigger_a_density_warning(self):
         notices = marker.build_review_notices(

@@ -54,6 +54,13 @@ class CanonicalTemplateTests(unittest.TestCase):
                 *[f"DCA {number}" for number in range(1, 13)],
             ],
         )
+        page_hint_note = workbook["How to use"]["C14"].value
+        states_reminder = workbook["DCA States"]["A2"].value
+        self.assertIn("page number printed inside the script", page_hint_note)
+        self.assertIn("sequential PDF page position", page_hint_note)
+        self.assertIn("指定页码范围", page_hint_note)
+        self.assertIn("Selected-page ranges", states_reminder)
+        self.assertIn("剧本内印刷页码", states_reminder)
 
     def test_character_dropdowns_cover_all_dca_assignment_cells(self):
         with warnings.catch_warnings():

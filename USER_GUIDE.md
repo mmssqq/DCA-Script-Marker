@@ -82,7 +82,7 @@ or song. Do not rename the columns.
 | Start Line Character | The speaker of the start cue. Optional, but strongly recommended when the same cue text is used by more than one character. |
 | Start Line Text | The exact phrase that activates this state. Copy it directly from the selectable script text when possible, including punctuation. |
 | State Start position | Enter exactly `Before` if the new state applies before the cue, or `After` if it applies after the cue. |
-| Page Hint | Optional. Use the page number printed on the script page. If there is no printed page number, use the PDF page number. This helps when cue text repeats. |
+| Page Hint | Optional. Normally use the number printed inside the script. If that page has no printed number, use its sequential PDF page position, counting the first file page or cover as PDF page 1. This strict hint helps when cue text repeats. |
 | Notes | For your own notes. The marker does not use this column. |
 | DCA 1 to DCA 12 | Assign the characters carried by each DCA in this state. |
 
@@ -91,6 +91,16 @@ each character on a separate line when one DCA carries several people. To add
 a script alias, put it in square brackets after the main name, for example
 `Lin Feifei [Feifei]` or `林菲菲 [菲菲]`. Separate multiple aliases inside the
 brackets with commas.
+
+> Important page-number rule: the app uses two different page numbers. Excel
+> Page Hint normally means the number printed inside the script. **Mark
+> selected pages only** always means the sequential PDF page position shown by
+> the viewer, counting from the file's first page. For example, if printed
+> script page 1 is PDF page 7 because of a cover and contents, enter Page Hint
+> `1`; to select only that page in the app, enter PDF page `7`. Confusing the
+> numbers can prevent a state from activating, activate a repeated cue on the
+> wrong page, leave early pages unmarked, or continue the previous state's DCA
+> assignments.
 
 For the first pages to receive assignments, make the first state cue an early,
 unique phrase at or before the first relevant dialogue. Use `Before` when the
@@ -107,8 +117,9 @@ Save the completed workbook as an `.xlsx` file before opening the marker.
 3. Next to **Output Folder**, choose where the marked PDF and review report
    should be created.
 4. Optional: turn on **Mark selected pages only** and enter the first and last
-   PDF page numbers. These are PDF page numbers, which may differ from the
-   numbers printed inside the script.
+   sequential PDF page positions shown by the viewer. Count from the first
+   file page, including covers and contents; never enter the page number
+   printed inside the script here.
 
 The current control labels are in English. The Chinese text in this guide is an
 explanatory translation of those controls.
@@ -166,6 +177,12 @@ found on a page that conflicts with its configured Page Hint when that state
 never activates. These checks deliberately avoid guessing from the number of
 marks per page, so a valid sparse script is not treated as a failure.
 
+If no dialogue DCA numbers are added, the app shows a dedicated warning with
+**Show Output Folder**, **Open Review Report**, and **Try Another PDF**. Do not
+use that output. Check that PDF text can be selected, the speaker-label layout
+is recognised, script names/aliases match the workbook assignments, and the
+first state cue and Page Hint are correct.
+
 Check at least:
 
 1. The first relevant pages and every state transition.
@@ -198,9 +215,11 @@ positions.
 
 - **The app icon is crossed out**: check the minimum macOS version on the
   release page and download the correct release.
-- **No DCA numbers appear**: confirm that the completed workbook, not the blank
-  template, was selected; confirm the PDF has selectable text; then check the
-  review report for missing start cues.
+- **No DCA numbers appear**: do not use the output. Confirm that the completed
+  workbook, not the blank template, was selected; confirm the PDF has
+  selectable text; check whether its speaker-label layout is recognised; make
+  script names/aliases match the assignments; then check the first state cue,
+  Page Hint, and review report.
 - **A state starts in the wrong place**: copy a more unique Start Line Text,
   choose the correct Before/After value, and add Start Line Character and Page
   Hint.
@@ -268,13 +287,20 @@ LibreOffice 对该模板的兼容性。
 | Start Line Character | 开始提示文字的说话角色。此项可选；如果同一句提示文字由多个角色说出，强烈建议填写。 |
 | Start Line Text | 激活该状态的准确文字。尽量直接从可选中文字的剧本中复制，并保留标点。 |
 | State Start position | 如果新状态在提示文字之前生效，请准确填写 `Before`；如果在提示文字之后生效，请填写 `After`。 |
-| Page Hint | 可选。优先填写剧本页面内印刷的页码；如果剧本没有内部页码，再填写 PDF 页码。提示文字重复时此项很有帮助。 |
+| Page Hint | 可选。通常填写剧本页面内印刷的页码；如果该页没有印刷页码，再填写该页在 PDF 阅读器中的顺序位置，并从文件第一页或封面作为 PDF 第 1 页开始计算。提示文字重复时，此严格页码提示很有帮助。 |
 | Notes | 仅供人工备注，软件不会读取此列。 |
 | DCA 1 到 DCA 12 | 填写当前状态中每个 DCA 所包含的角色。 |
 
 在 DCA 单元格中，可以从下拉列表选择角色，也可以手动输入。如果一个 DCA 包含多个
 角色，请在同一个单元格内每行填写一个角色。若剧本使用了别名，请在主要名称后用方括号
 填写，例如 `Lin Feifei [Feifei]` 或 `林菲菲 [菲菲]`。多个别名可在方括号内用逗号分隔。
+
+> 重要页码规则：软件会使用两种不同的页码。Excel 的 Page Hint 通常是剧本页面内印刷
+> 的页码；**Mark selected pages only** 始终使用 PDF 阅读器显示的顺序页码，并从文件
+> 第一页开始计算。例如：封面和目录使剧本内印刷的第 1 页成为 PDF 第 7 页时，Page
+> Hint 填 `1`；如只标注该页，软件中填写 PDF 第 `7` 页。混淆两种页码可能导致状态
+> 无法启动、重复提示在错误页面启动、前面页面没有标注，或后续页面继续使用上一状态的
+> DCA 分配。
 
 为了让最开始的相关页面也能获得正确分配，请让第一条状态提示尽量位于第一段相关对白
 之前或附近，并使用一段较早且唯一的文字。如果该状态在提示文字开始时已经生效，请选择
@@ -289,7 +315,8 @@ LibreOffice 对该模板的兼容性。
 2. 在 **Script PDF** 旁选择未经修改的原始剧本 PDF。
 3. 在 **Output Folder** 旁选择标注 PDF 和复核报告的保存位置。
 4. 可选：打开 **Mark selected pages only**，输入要处理的第一个和最后一个 PDF 页码。
-   这里使用的是 PDF 页码，可能与剧本页面内印刷的页码不同。
+   这里必须填写 PDF 阅读器显示的顺序页码，并将封面和目录计算在内；不要填写剧本页面
+   内印刷的页码。
 
 当前软件按钮和选项名称以英文显示，本手册中的中文为对应操作说明。
 
@@ -338,6 +365,11 @@ LibreOffice 对该模板的兼容性。
 Page Hint 的冲突。这项检查不会用“每页标注数量”来猜测对错，因此不会仅因为一份合法
 剧本的标注较少就将其判定为失败。
 
+如果没有添加任何对白 DCA 编号，软件会显示专门警告，并提供 **Show Output Folder**、
+**Open Review Report** 和 **Try Another PDF**。请勿直接使用该输出。请确认 PDF 文字
+可以选择、软件能够识别角色标签排版、剧本名称或别名与表格分配一致，并检查第一个状态
+提示及 Page Hint 是否正确。
+
 请至少检查：
 
 1. 最开始的相关页面以及每一次状态切换。
@@ -365,8 +397,9 @@ Page Hint 的冲突。这项检查不会用“每页标注数量”来猜测对�
 
 - **软件图标带有禁止符号**：请查看 Release 页面上的最低 macOS 要求，并下载适合的
   发行版本。
-- **没有出现 DCA 编号**：确认选择的是填写完成的 Excel，而不是空白模板；确认 PDF
-  可以选中文字；再检查复核报告中是否有未找到的状态提示。
+- **没有出现 DCA 编号**：请勿使用该输出。确认选择的是填写完成的 Excel，而不是空白
+  模板；确认 PDF 可以选中文字；检查软件是否能识别角色标签排版；让剧本名称或别名与
+  表格分配一致；再检查第一个状态提示、Page Hint 和复核报告。
 - **状态从错误位置开始**：复制一段更独特的 Start Line Text，确认 Before/After，
   并填写 Start Line Character 和 Page Hint。
 - **某个角色没有被标注**：让 `Character List` 和 DCA 单元格中的名称与对白标签一致，

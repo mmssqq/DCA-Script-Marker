@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_PATH="${1:-}"
 APP_VERSION="${DCA_VERSION:-1.0.0}"
-BUILD_NUMBER="${DCA_BUILD_NUMBER:-5}"
+BUILD_NUMBER="${DCA_BUILD_NUMBER:-6}"
 RELEASE_CHANNEL="${DCA_RELEASE_CHANNEL:-stable}"
 case "$RELEASE_CHANNEL" in
     stable)
