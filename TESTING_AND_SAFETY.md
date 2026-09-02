@@ -8,13 +8,15 @@ used in a show. The complete workflow is available in the bilingual
 ## Supported Macs
 
 - Apple Silicon and Intel Macs
-- Version 1.0.0 targets macOS 12 Monterey or later. The previous notarized
+- Version 2.0.0 targets macOS 12 Monterey or later. The previous notarized
   release candidate passed physical installation, launch, marked-PDF
   generation, and review-report generation on Intel macOS 12.7.6. Apple
   Silicon Monterey 12.x remains unverified.
 - Text-based script PDFs with selectable text
 - DCA State workbooks in the supplied horizontal format or the supported
   legacy vertical format
+- Optional Performer / Role Mapping in the supplied workbook, while older
+  workbooks without mappings remain supported
 
 Scanned/image-only PDFs, password-protected PDFs, and digitally signed PDFs
 are not supported in this release. Do not overwrite a production copy of a
@@ -34,6 +36,23 @@ Excel 的 **Page Hint** 通常填写剧本页面内印刷的页码；如果该�
 PDF 阅读器显示的顺序页码，并从封面作为 PDF 第 1 页开始计算。**Mark selected pages
 only** 始终使用 PDF 顺序页码，不要填写剧本内印刷页码。混淆两种页码可能导致状态
 无法启动、重复提示在错误页面启动、前面页面没有标注，或继续使用上一状态的分配。
+
+## Performer / Role Mapping safety / 演员与角色对应安全检查
+
+Performer / Role Mapping is for different script roles played by one person or
+carried by one DCA identity. It is not a replacement for inline square-bracket
+aliases, which describe alternate printed forms of the same role in one DCA
+assignment cell/state. For example, enter `Ben` in `Character List` column A
+and `Barber, Butcher, Coach` in column B, then select only `Ben` in `DCA States`.
+The three script role labels should receive Ben's DCA number. The app rejects
+conflicting mappings instead of choosing an identity silently. Existing
+workbooks with column B blank continue to work as before.
+
+演员 / 角色对应用于“同一位演员或同一 DCA 身份对应多个不同剧本角色”，不会取代方括号内联
+别名；内联别名仅表示同一角色在某个 DCA 分配单元格 / 状态中的不同印刷形式。例如，
+在 `Character List` A 列填写 `Ben`，B 列填写 `Barber, Butcher, Coach`，再在 `DCA States`
+中只选择 `Ben`；三个剧本角色标签都应获得 Ben 的 DCA 编号。如果对应关系冲突，软件会拒绝该
+工作簿，而不会默默猜测。B 列留空的旧工作簿会保持原有行为。
 
 ## Install the release
 
@@ -67,10 +86,15 @@ the release.
 6. Repeat the test with **First Appearance Only** and **DCA State Legend**.
    Confirm their visible DCA numbers or legend, plus page header/footer labels,
    can be moved or deleted.
-7. Check the review report for missing states and unexpected speaker names.
-8. Generate a short sample with **Header Only**, **Footer Only**, and **Off**;
+7. Test Performer / Role Mapping with a small sanitized case: put `Ben` in
+   `Character List` column A and `Barber, Butcher, Coach` in column B; select Ben
+   in the active DCA State and confirm all three printed role labels receive
+   Ben's DCA number while the legend shows only Ben. Also confirm an inline
+   alias still affects only the DCA cell/state where it is written.
+8. Check the review report for missing states and unexpected speaker names.
+9. Generate a short sample with **Header Only**, **Footer Only**, and **Off**;
    confirm that no label appears in a location you disabled.
-9. Confirm the first relevant page and every state transition use the intended
+10. Confirm the first relevant page and every state transition use the intended
    DCA assignment. If no DCA numbers are added, do not use the output; open the
    review report and check selectable text, speaker-label layout, names,
    assignments, the first state cue, and Page Hint.
@@ -96,6 +120,8 @@ Please include:
 - Marking style and relevant appearance settings
 - Sequential PDF page position, printed script page number, and DCA State where
   the issue appears
+- Whether Performer / Role Mapping or an inline alias was used, including a
+  sanitized example of the relevant names
 - What you expected and what happened
 - Whether closing and reopening the PDF changed the result
 - The review report, only if it contains no confidential material

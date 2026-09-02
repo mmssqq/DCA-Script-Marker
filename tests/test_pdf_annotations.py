@@ -739,6 +739,102 @@ class PageStateAnnotationTests(unittest.TestCase):
             document.close()
 
 
+class PaddedSpeakerAnnotationTests(unittest.TestCase):
+    def check_padded_speaker_positions(self, *, editable, first_appearance=False):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 50), "START", fontsize=12)
+            labels = [
+                (72, 100, " " * 60 + "NOVA"),
+                (72, 170, " " * 63 + "ELI"),
+                (72, 240, " " * 61 + "DANA"),
+                (72, 310, " " * 52 + "NOVA and ELI"),
+                (300, 380, "NOVA"),
+            ]
+            if first_appearance:
+                labels = labels[:3]
+            for x, y, label in labels:
+                page.insert_text((x, y), label, fontsize=12, fontname="tibo")
+                page.insert_text((72, y + 25), "The next line.", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+            original_bytes = source_pdf.read_bytes()
+
+            with fitz.open(source_pdf) as document:
+                expected_boxes = [
+                    fitz.Rect(next(
+                        char["bbox"] for char in span["chars"]
+                        if not char["c"].isspace()
+                    ))
+                    for block in document[0].get_text("rawdict")["blocks"]
+                    for line in block.get("lines", [])
+                    for span in line["spans"]
+                    if "".join(char["c"] for char in span["chars"]).strip()
+                    in {"NOVA", "ELI", "DANA", "NOVA and ELI"}
+                ]
+            expected_numbers = ["1", "2", "3", "1/2", "1"]
+            if first_appearance:
+                expected_boxes = expected_boxes[:3]
+                expected_numbers = expected_numbers[:3]
+            gap = 19
+            vertical_offset = 3
+            marked_count, unmatched, _ = marker.mark_pdf(
+                [{
+                    "name": "Scene 1", "key": "scene 1",
+                    "cue": marker.cue_match_key("START"),
+                    "cue_speaker": "", "position": "before", "page_hint": "",
+                }],
+                {"scene 1": {"nova": "1", "eli": "2", "dana": "3"}},
+                str(source_pdf), str(marked_pdf),
+                editable=editable, first_appearance=first_appearance,
+                number_style={"gap": gap, "vertical_offset": vertical_offset},
+                state_style={"font_name": "helv", "font_file": None},
+            )
+            self.assertEqual(marked_count, len(expected_numbers))
+            self.assertEqual(unmatched, [])
+            self.assertEqual(source_pdf.read_bytes(), original_bytes)
+            with fitz.open(marked_pdf) as document:
+                page = document[0]
+                if editable:
+                    marks = [
+                        (annotation.info["content"], fitz.Rect(annotation.rect))
+                        for annotation in page.annots() or []
+                        if re.fullmatch(r"\d+(?:/\d+)*", annotation.info["content"])
+                    ]
+                    self.assertTrue(all(
+                        annotation.type[1] == "FreeText"
+                        for annotation in page.annots() or []
+                    ))
+                else:
+                    marks = [
+                        (span["text"], fitz.Rect(span["bbox"]))
+                        for block in page.get_text("dict")["blocks"]
+                        for line in block.get("lines", [])
+                        for span in line["spans"]
+                        if re.fullmatch(r"\d+(?:/\d+)*", span["text"])
+                    ]
+                self.assertEqual([text for text, _ in marks], expected_numbers)
+                for (_, actual), visible in zip(marks, expected_boxes):
+                    self.assertAlmostEqual(actual.x1, visible.x0 - gap, places=2)
+                    if editable:
+                        self.assertAlmostEqual(
+                            actual.y0, visible.y0 + vertical_offset, places=2
+                        )
+
+    def test_editable_numbers_ignore_invisible_speaker_padding(self):
+        self.check_padded_speaker_positions(editable=True)
+
+    def test_static_numbers_ignore_invisible_speaker_padding(self):
+        self.check_padded_speaker_positions(editable=False)
+
+    def test_first_appearance_numbers_ignore_invisible_speaker_padding(self):
+        self.check_padded_speaker_positions(editable=True, first_appearance=True)
+
+
 class SpeakerRowAnnotationTests(unittest.TestCase):
     def test_split_title_case_period_labels_require_trusted_columns(self):
         def ocr_line(text, x0, x1, y):
@@ -1872,7 +1968,7 @@ class SpeakerRowAnnotationTests(unittest.TestCase):
                         ocr_line("LUX.", 349.16, 372.63, 100),
                         ocr_line("RYNN.", 443.12, 466.59, 100),
                         ocr_line("VELA &", 100, 145, 160),
-                        ocr_line("QUASARWISP.", 195, 260, 160),
+                        ocr_line("HÉ LÈ NE.", 195, 260, 160),
                         ocr_line("VELOR.", 100, 140, 220),
                         ocr_line("PAXEN, signal.", 190, 280, 220),
                         ocr_line("(LUX enters)", 100, 180, 280),
@@ -1902,7 +1998,7 @@ class SpeakerRowAnnotationTests(unittest.TestCase):
                     "lux": "2",
                     "rynn": "1",
                     "vela": "6",
-                    "quasarwisp": "7",
+                    "helene": "7",
                     "velor": "8",
                     "paxen": "9",
                 }
@@ -1953,6 +2049,141 @@ class SpeakerRowAnnotationTests(unittest.TestCase):
             self.assertEqual(by_row[220], ["8"])
             self.assertEqual(by_row[280], [])
             self.assertNotIn("9", annotation_contents)
+
+    def test_tight_cjk_duet_columns_and_tabbed_right_speaker_both_mark(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 50), "START", fontsize=11)
+
+            cjk_font = "cjk"
+            cjk_font_file = marker.CHINESE_FONT_FILE
+            font_size = 11.88
+
+            # Two independent lyric columns share a baseline, but the gap
+            # between their first lines is below the old unconditional
+            # 60-point split threshold.
+            page.insert_text(
+                (72, 100),
+                "姚澜       我想要的到底是什么现在呢",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+            page.insert_text(
+                (297, 100),
+                "程柯文     他会答应我的请求吗",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+
+            # Word can place a right-column speaker after a long tab inside
+            # the same extracted span as the left lyric. The following
+            # right-hand fragment is that speaker's first lyric.
+            page.insert_text(
+                (72, 180),
+                "姚澜",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+            page.insert_text(
+                (135, 180),
+                "遇见你的画面                                  周文卓",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+            page.insert_text(
+                (388, 180),
+                "告别你的画面",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+
+            # A similar tabbed name without a separate left speaker anchor
+            # is dialogue text, not a second-column cue.
+            page.insert_text(
+                (144, 260),
+                "人生孤独                                    程柯文    为他干杯",
+                fontsize=font_size,
+                fontname=cjk_font,
+                fontfile=cjk_font_file,
+            )
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 100",
+                "key": "scene 100",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+            }]
+            assignments = {
+                "scene 100": {
+                    "姚澜": "1",
+                    "程柯文": "2",
+                    "周文卓": "3",
+                }
+            }
+
+            marked_count, unmatched_names, _ = marker.mark_pdf(
+                states,
+                assignments,
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            number_annotations = []
+            for annotation in document[0].annots() or []:
+                content = annotation.info.get("content", "")
+                if re.fullmatch(r"\d+(?:/\d+)*", content):
+                    number_annotations.append({
+                        "content": content,
+                        "x0": annotation.rect.x0,
+                        "y0": annotation.rect.y0,
+                    })
+            by_row = {
+                y: [
+                    annotation["content"]
+                    for annotation in sorted(
+                        number_annotations,
+                        key=lambda item: item["x0"],
+                    )
+                    if abs(annotation["y0"] - y) < 1
+                ]
+                for y in (90, 170, 250)
+            }
+            right_x_positions = [
+                annotation["x0"]
+                for annotation in number_annotations
+                if annotation["content"] in {"2", "3"}
+            ]
+            document.close()
+
+            self.assertEqual(marked_count, 4)
+            self.assertEqual(by_row[90], ["1", "2"])
+            self.assertEqual(by_row[170], ["1", "3"])
+            self.assertEqual(by_row[250], [])
+            self.assertTrue(
+                all(position > 200 for position in right_x_positions)
+            )
+            self.assertEqual(len(unmatched_names), 1)
+            self.assertIn("人生孤独", unmatched_names[0][2])
 
 
 class ReviewSafetyWarningTests(unittest.TestCase):
@@ -2316,6 +2547,10 @@ class ReviewSafetyWarningTests(unittest.TestCase):
                 saved_result["state_activation_pages"],
                 {"scene 1": 1},
             )
+            self.assertEqual(
+                saved_result["performer_role_mapping_pages"],
+                {},
+            )
             self.assertEqual(saved_result["marked_pages"], [1])
             self.assertEqual(saved_result["marked_page_counts"], {"1": 1})
             self.assertEqual(saved_result["marked_cue_counts"], [{
@@ -2330,6 +2565,230 @@ class ReviewSafetyWarningTests(unittest.TestCase):
             self.assertEqual(saved_result["review_report"], review_report)
             self.assertTrue(Path(output_pdf).exists())
             self.assertTrue(Path(review_report).exists())
+
+    def test_performer_role_mapping_card_is_opt_in_single_annotation(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            disabled_pdf = temporary_path / "disabled.pdf"
+            enabled_pdf = temporary_path / "enabled.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 110), "START", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 1",
+                "key": "scene 1",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+                "performer_role_rows": [{
+                    "dca": ["2"],
+                    "performer": "Ben",
+                    "roles": ["Barber", "Butcher", "Coach"],
+                }],
+            }]
+
+            marker.mark_pdf(
+                states,
+                {"scene 1": {}},
+                str(source_pdf),
+                str(disabled_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                },
+            )
+            disabled = fitz.open(disabled_pdf)
+            disabled_contents = [
+                annotation.info.get("content", "")
+                for annotation in disabled[0].annots() or []
+            ]
+            self.assertFalse(any(
+                "Performer / Role Mapping" in content
+                for content in disabled_contents
+            ))
+            disabled.close()
+
+            diagnostics = {}
+            marker.mark_pdf(
+                states,
+                {"scene 1": {}},
+                str(source_pdf),
+                str(enabled_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                    "show_performer_role_mapping": True,
+                    "page_header_footer_text_colour": (0.0, 0.0, 1.0),
+                    "page_header_footer_border_colour": (0.0, 0.0, 1.0),
+                },
+                diagnostics=diagnostics,
+            )
+            self.assertEqual(
+                diagnostics["performer_role_mapping_pages"],
+                {"scene 1": 1},
+            )
+
+            document = fitz.open(enabled_pdf)
+            marked_page = document[0]
+            mapping_annotations = [
+                annotation
+                for annotation in marked_page.annots() or []
+                if "Performer / Role Mapping"
+                in annotation.info.get("content", "")
+            ]
+            self.assertEqual(len(mapping_annotations), 1)
+            annotation = mapping_annotations[0]
+            self.assertIn("DCA 2 | Ben", annotation.info["content"])
+            self.assertIn(
+                "Barber / Butcher / Coach",
+                annotation.info["content"],
+            )
+            self.assertEqual(annotation.type[1], "FreeText")
+            self.assertAlmostEqual(annotation.border["width"], 0.8, places=3)
+            _, appearance = document.xref_get_key(annotation.xref, "AP")
+            self.assertNotEqual(appearance, "null")
+            square_annotations = [
+                candidate
+                for candidate in marked_page.annots() or []
+                if candidate.type[1] == "Square"
+            ]
+            self.assertEqual(square_annotations, [])
+            document.close()
+
+    def test_multiple_mapping_cards_on_one_page_do_not_overlap(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 180), "FIRST", fontsize=12)
+            page.insert_text((72, 580), "SECOND", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+
+            states = [
+                {
+                    "name": "Scene 1",
+                    "key": "scene 1",
+                    "cue": marker.cue_match_key("FIRST"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                    "performer_role_rows": [{
+                        "dca": ["1"],
+                        "performer": "Ben",
+                        "roles": ["Barber", "Coach"],
+                    }],
+                },
+                {
+                    "name": "Scene 2",
+                    "key": "scene 2",
+                    "cue": marker.cue_match_key("SECOND"),
+                    "cue_speaker": "",
+                    "position": "before",
+                    "page_hint": "",
+                    "performer_role_rows": [{
+                        "dca": ["3"],
+                        "performer": "Mary",
+                        "roles": ["Queen", "Doctor"],
+                    }],
+                },
+            ]
+
+            marker.mark_pdf(
+                states,
+                {"scene 1": {}, "scene 2": {}},
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={
+                    "font_name": "helv",
+                    "font_file": None,
+                    "show_performer_role_mapping": True,
+                },
+            )
+
+            document = fitz.open(marked_pdf)
+            mapping_rects = [
+                fitz.Rect(annotation.rect)
+                for annotation in document[0].annots() or []
+                if "Performer / Role Mapping"
+                in annotation.info.get("content", "")
+            ]
+            self.assertEqual(len(mapping_rects), 2)
+            self.assertFalse(mapping_rects[0].intersects(mapping_rects[1]))
+            document.close()
+
+    def test_selected_page_export_carries_active_mapping_card_forward(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            marked_pdf = temporary_path / "marked.pdf"
+
+            source = fitz.open()
+            first_page = source.new_page(width=595, height=842)
+            first_page.insert_text((72, 110), "START", fontsize=12)
+            source.new_page(width=595, height=842)
+            source.save(source_pdf)
+            source.close()
+
+            states = [{
+                "name": "Scene 1",
+                "key": "scene 1",
+                "cue": marker.cue_match_key("START"),
+                "cue_speaker": "",
+                "position": "before",
+                "page_hint": "",
+                "performer_role_rows": [{
+                    "dca": ["1"],
+                    "performer": "Ben",
+                    "roles": ["Barber"],
+                }],
+            }]
+
+            diagnostics = {}
+            marker.mark_pdf(
+                states,
+                {"scene 1": {}},
+                str(source_pdf),
+                str(marked_pdf),
+                editable=True,
+                state_style={"show_performer_role_mapping": True},
+                start_page=2,
+                end_page=2,
+                diagnostics=diagnostics,
+            )
+
+            document = fitz.open(marked_pdf)
+            first_page_cards = [
+                annotation
+                for annotation in document[0].annots() or []
+                if "Performer / Role Mapping"
+                in annotation.info.get("content", "")
+            ]
+            second_page_cards = [
+                annotation
+                for annotation in document[1].annots() or []
+                if "Performer / Role Mapping"
+                in annotation.info.get("content", "")
+            ]
+            self.assertEqual(first_page_cards, [])
+            self.assertEqual(len(second_page_cards), 1)
+            self.assertEqual(
+                diagnostics["performer_role_mapping_pages"],
+                {"scene 1": 2},
+            )
+            document.close()
 
 
 if __name__ == "__main__":

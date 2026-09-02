@@ -5,13 +5,24 @@ import SwiftUI
 
 @main
 struct DCA_Script_MarkerApp: App {
+    @AppStorage("appLanguage") private var appLanguageRaw = (
+        AppLanguage.systemDefault.rawValue
+    )
+
+    private var appLanguage: AppLanguage {
+        AppLanguage(rawValue: appLanguageRaw) ?? .english
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
         .commands {
             CommandGroup(replacing: .help) {
-                Button("DCA Script Marker Help") {
+                Button(appLanguage.text(
+                    "DCA Script Marker Help",
+                    "DCA Script Marker 帮助"
+                )) {
                     NotificationCenter.default.post(
                         name: .openDCAScriptMarkerHelp,
                         object: nil

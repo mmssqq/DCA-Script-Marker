@@ -1,5 +1,89 @@
 # Release notes
 
+## 2.0.0 (build 8)
+
+Version 2 adds editable local DCA projects alongside the Excel workflow. It
+supports macOS 12 Monterey or later on Apple Silicon and 64-bit Intel Macs.
+
+### Version 2 project workflow
+
+- Adds a local `.dcamarker` project format that remembers the Character List,
+  DCA States, linked script PDF, output folder, selected-page range, marking
+  style, and annotation appearance
+- Adds an in-app editor for Character List and all twelve DCA assignment
+  columns, with state navigation, duplicate/add/delete controls, and multiline
+  assignments
+- Adds setup checks for missing state names or start cues, duplicate DCA Names,
+  unknown assignments, and the same DCA Name assigned to multiple columns;
+  repeated column assignments are non-blocking because solo-to-ensemble use
+  can be intentional
+- Adds Ignore and X controls that suppress confirmed duplicate-assignment
+  reminders for the current project session without hiding required setup errors
+- Imports existing compatible Excel workbooks into Version 2 projects
+- Exports any Version 2 project as a clean, compatible Excel workbook with
+  Character List, DCA States, formatting, and data validation
+- Keeps script processing local to the Mac; project files store paths to the
+  selected script and output folder, not copies of the script
+
+### Performer / Role Mapping
+
+- Adds an optional, workbook-wide Performer / Role Mapping for productions in
+  which one performer, radio mic, or DCA identity covers several differently
+  named script roles
+- Uses `Character List` column A as the stable DCA identity and column B for
+  its script role names: for example, `Ben` with `Barber, Butcher, Coach`
+- Lets users select only `Ben` in `DCA States`; dialogue labels for `Barber`,
+  `Butcher`, and `Coach` receive Ben's DCA number while legends retain `Ben`
+- Keeps existing square-bracket aliases as a separate feature for alternate
+  printed forms of the same role in one DCA assignment cell/state
+- Preserves compatibility with existing workbooks that do not use role
+  mappings
+- Rejects conflicting mappings instead of silently guessing which DCA identity
+  should own a script role
+- Adds role lookup choices such as `Jack [Student]` and `Jack [Teacher]` to
+  Excel dropdowns and the in-app picker. Both keep the selected role label
+  while assigning the same DCA Name and all of its mapped roles; the app adds
+  that DCA Name only once per cell
+- Keeps ensemble labels such as `MALE ENSEMBLE` as ordinary DCA Names, without
+  automatic membership management or expansion
+- Converts older saved membership definitions into ordinary DCA-cell entries
+  in a new project copy while preserving the original file
+
+### Editor and template improvements
+
+- Keeps the state number visible while scrolling horizontally and lets users
+  select a state from its row
+- Provides larger Add buttons, compact state rows, and bilingual keyboard hints
+- Preserves typing focus, selected role labels, aliases, and display capitalization
+- Updates the blank Excel template's dropdowns when DCA Names or mapped roles
+  are added, renamed, or removed within its prepared Character List rows
+- Includes the updated bilingual User Guide and Excel How to use instructions
+
+### Verification and release safeguards
+
+- 157 automated engine, interface-contract, template, and packaging tests pass
+- Release packaging verifies the Universal app and both self-contained engines,
+  matching source files, bundled guide, template, and licence notices
+- Public distribution requires Developer ID signing, Apple notarization,
+  stapling, Gatekeeper assessment, disk-image validation, and SHA-256 checksums
+- Private production scripts, DCA projects, and internal test outputs are not
+  included in the public source or installer
+
+### Important limitations
+
+- Compare every exported script with the original PDF, DCA assignments, and
+  review report before rehearsal or performance
+- Use a short, exact start cue from one printed PDF line; cues spanning several
+  printed lines are not supported
+- The blank template provides live dropdown choices within its prepared input
+  rows. Project-exported Excel choices reflect the project at export time;
+  export again after changing its Character List
+- Unusual layouts and speaker typography can still require manual review;
+  scanned/image-only, password-protected, and digitally signed PDFs are unsupported
+- Physical Intel macOS 12.7.6 validation was completed on the preceding release;
+  Version 2 has not been physically tested on every supported Mac/OS combination
+- There is no automatic updater; keep a backup of existing projects and workbooks
+
 ## 1.0.0 (build 7) — first stable release
 
 DCA Script Marker 1.0.0 is the first stable GitHub release. It is a local,

@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import os
+import copy
 import fitz  # PyMuPDF
 import re
+import math
 import unicodedata
 import argparse
 import html
@@ -14,6 +16,11 @@ import tempfile
 import warnings
 import openpyxl
 from openpyxl import load_workbook
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.defined_name import DefinedName
 from datetime import date
 
 TEMPLATE_FILE = "dca_template.xlsx"
@@ -107,6 +114,56 @@ def speaker_base_key(text):
 
 def contains_cjk(text):
     return any("\u4e00" <= character <= "\u9fff" for character in str(text))
+
+
+def is_cjk_character(character):
+    """Return true for a Han character used in a printed speaker name."""
+    return (
+        "\u3400" <= character <= "\u4dbf"
+        or "\u4e00" <= character <= "\u9fff"
+        or "\uf900" <= character <= "\ufaff"
+    )
+
+
+def has_spaced_cjk_speaker_prefix(text, speaker_name):
+    """Recognise a Chinese name padded to a wider character column.
+
+    Some scripts visually expand a two-character name to the width of a
+    three-character name, for example ``顾  正 dialogue``. The first wide
+    gap is part of the name, not the boundary before the dialogue. Require
+    that wider internal padding plus a separate boundary after the complete
+    known name so ordinary narration that merely begins with a character name
+    stays rejected.
+    """
+    cleaned_text = unicodedata.normalize("NFKC", str(text)).translate(
+        SPEAKER_CHARACTER_TRANSLATION
+    )
+    name_characters = [
+        character
+        for character in unicodedata.normalize(
+            "NFKC",
+            str(speaker_name),
+        ).translate(SPEAKER_CHARACTER_TRANSLATION)
+        if not character.isspace()
+    ]
+
+    if (
+        len(name_characters) < 2
+        or not all(is_cjk_character(character) for character in name_characters)
+    ):
+        return False
+
+    spaced_name_pattern = r"\s+".join(
+        re.escape(character) for character in name_characters
+    )
+    prefix_match = re.match(
+        rf"^\s*({spaced_name_pattern})(?=\s+|[(:：])",
+        cleaned_text,
+    )
+    return bool(
+        prefix_match
+        and re.search(r"\s{2,}", prefix_match.group(1))
+    )
 
 
 def css_colour(colour):
@@ -305,6 +362,15 @@ def looks_like_speaker_label(text, speaker_name):
     ):
         return not english_name or has_english_cue_case(first_word)
 
+    # A writer may pad a two-character Chinese name to the same visual width
+    # as a three-character name. In extracted PDF text, ``顾  正  dialogue``
+    # therefore contains a wide gap inside the speaker name, while the gap
+    # after it may be emitted as one or more PDF spaces. Validate the complete
+    # known name before using the first wide gap as the speaker/dialogue
+    # boundary.
+    if has_spaced_cjk_speaker_prefix(text, speaker_name):
+        return True
+
     # Chinese theatre scripts normally have a wide gap after a speaker label.
     label = re.split(r"\s{2,}", text, maxsplit=1)[0]
     if speaker_match_key(label) == speaker_match_key(speaker_name):
@@ -457,6 +523,24 @@ def split_known_speaker_group(text, possible_characters):
     exact_name = match_known_speaker_label(cleaned, possible_characters)
     if exact_name:
         return [exact_name]
+
+    # WPS and older Word PDFs may insert visual tracking spaces inside a
+    # name while keeping the ampersand or slash as a separate fragment, for
+    # example ``DOLOKHOV & HÉ LÈ NE``. Individual-name matching already uses
+    # ``speaker_match_key`` and therefore ignores those spaces and accents.
+    # Apply that same strict, whole-part comparison to complete shared labels
+    # before falling back to the character-by-character parser below.
+    separated_parts = [
+        part.strip()
+        for part in re.split(r"[,，/&＋+、／;；]", cleaned)
+    ]
+    if len(separated_parts) >= 2 and all(separated_parts):
+        separated_names = [
+            match_known_speaker_label(part, possible_characters)
+            for part in separated_parts
+        ]
+        if all(separated_names):
+            return separated_names
 
     # GUIDE/NARRATOR/ (OFFSTAGE) is an existing supported form. Once the
     # delivery note is removed, the final slash is label punctuation.
@@ -644,6 +728,27 @@ def get_speaker_names(text, possible_characters):
         return []
     if has_incomplete_explicit_speaker_group(text, possible_characters):
         return []
+
+    complete_shared_names = split_known_speaker_group(
+        stripped_text,
+        possible_characters,
+    )
+    if len(complete_shared_names) >= 2:
+        return complete_shared_names
+
+    # A complete shared label can end with a parenthetical delivery or group
+    # note without using a colon, for example
+    # ``亨利/麻省理工/斯坦福(员工合唱)``. Only accept this shortcut when the
+    # text before the note resolves completely to at least two known names;
+    # ordinary dialogue containing parentheses must remain rejected.
+    without_delivery_note = strip_speaker_delivery_note(stripped_text)
+    if without_delivery_note != stripped_text:
+        delivery_group_names = split_known_speaker_group(
+            stripped_text,
+            possible_characters,
+        )
+        if len(delivery_group_names) >= 2:
+            return delivery_group_names
 
     clean_text = normalise(stripped_text)
     candidates = sorted(possible_characters, key=len, reverse=True)
@@ -961,6 +1066,294 @@ def speaker_label_continues(text):
     )
 
 
+def get_leading_known_speaker_names(text, possible_characters):
+    """Return a validated speaker label at the start of an inline cue.
+
+    This is deliberately narrower than ``get_speaker_names``. It is used
+    while reconstructing parallel lyric rows, before trusted page columns
+    are available, so the printed fragment itself must still look like a
+    complete speaker cue rather than dialogue that merely begins with a
+    character's name.
+    """
+    if starts_with_stage_direction(text):
+        return []
+
+    speaker_names = get_speaker_names(text, possible_characters)
+    if (
+        not speaker_names
+        or not all(
+            name in possible_characters for name in speaker_names
+        )
+    ):
+        return []
+
+    if is_standalone_speaker_label(text, possible_characters):
+        return speaker_names
+
+    if (
+        len(speaker_names) == 1
+        and looks_like_speaker_label(text, speaker_names[0])
+    ):
+        return speaker_names
+
+    if (
+        len(speaker_names) >= 2
+        and get_explicit_speaker_names(
+            text,
+            set(speaker_names),
+        ) == speaker_names
+    ):
+        return speaker_names
+
+    return []
+
+
+def padded_span_visible_left_edges(page, page_text):
+    """Locate visible glyphs without changing the geometry used for matching.
+
+    Some PDFs centre a speaker with spaces inside the same text span. Its
+    bounding box then starts at the margin, far before the printed name.
+    Use the PDF's actual character positions, not an estimated space width.
+    Exact text/bbox keys deliberately exclude any synthetic spans produced
+    later when reconstructing parallel speaker columns.
+    """
+    padded_spans = {
+        (tuple(span["bbox"]), span["text"])
+        for block in page_text.get("blocks", [])
+        for line in block.get("lines", [])
+        if tuple(line.get("dir", (1, 0))) == (1, 0)
+        for span in line.get("spans", [])
+        if span.get("text", "")[:1].isspace() and span["text"].strip()
+    }
+    if not padded_spans:
+        return {}
+
+    visible_left_edges = {}
+    for block in page.get_text("rawdict").get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                characters = span.get("chars", [])
+                text = "".join(char["c"] for char in characters)
+                key = (tuple(span["bbox"]), text)
+                if key not in padded_spans:
+                    continue
+                visible = next(
+                    (char for char in characters if not char["c"].isspace()),
+                    None,
+                )
+                if visible is not None:
+                    left = float(visible["bbox"][0])
+                    if (
+                        math.isfinite(left)
+                        and span["bbox"][0] < left < span["bbox"][2]
+                    ):
+                        visible_left_edges[key] = left
+    return visible_left_edges
+
+
+def split_embedded_right_speaker_lines(
+    page,
+    page_text,
+    possible_characters,
+):
+    """Expose a tabbed right-column speaker as its own synthetic line.
+
+    Word-generated PDFs can store a visual row like this in one span::
+
+        left lyric            RIGHT SPEAKER      right lyric
+
+    The word boxes still retain the real x-position of ``RIGHT SPEAKER``.
+    Split only when another known speaker anchors the left side of the same
+    baseline and dialogue continues to the right. Those guards keep names in
+    ordinary prose and stage directions out of the speaker pipeline.
+    """
+    words_by_line = {}
+    for word in page.get_text("words"):
+        if len(word) < 8:
+            continue
+        words_by_line.setdefault(
+            (int(word[5]), int(word[6])),
+            [],
+        ).append(word)
+
+    original_lines = [
+        line
+        for block in page_text.get("blocks", [])
+        if "lines" in block
+        for line in block["lines"]
+        if any(
+            normalise(span.get("text", ""))
+            for span in line.get("spans", [])
+        )
+    ]
+    leading_speakers_by_line = {
+        id(line): get_leading_known_speaker_names(
+            "".join(
+                span.get("text", "")
+                for span in line.get("spans", [])
+            ),
+            possible_characters,
+        )
+        for line in original_lines
+    }
+
+    for block_index, block in enumerate(page_text.get("blocks", [])):
+        if "lines" not in block:
+            continue
+
+        expanded_lines = []
+        for line_index, line in enumerate(block["lines"]):
+            line_words = sorted(
+                words_by_line.get((block_index, line_index), []),
+                key=lambda word: int(word[7]),
+            )
+            nonempty_spans = [
+                span
+                for span in line.get("spans", [])
+                if normalise(span.get("text", ""))
+            ]
+            raw_text = "".join(
+                span.get("text", "")
+                for span in line.get("spans", [])
+            )
+            split_result = None
+
+            if (
+                len(line_words) >= 2
+                and len(nonempty_spans) == 1
+                and not starts_with_stage_direction(raw_text)
+            ):
+                for word_index in range(1, len(line_words)):
+                    word = line_words[word_index]
+                    previous_word = line_words[word_index - 1]
+                    embedded_name = match_known_speaker_label(
+                        word[4],
+                        possible_characters,
+                    )
+                    if not embedded_name:
+                        continue
+
+                    internal_gap = float(word[0]) - float(previous_word[2])
+                    if (
+                        internal_gap < 60
+                        or float(word[0]) < page.rect.width * 0.45
+                    ):
+                        continue
+
+                    left_peer_names = next(
+                        (
+                            leading_speakers_by_line[id(peer)]
+                            for peer in original_lines
+                            if peer is not line
+                            and abs(
+                                float(peer["bbox"][1])
+                                - float(line["bbox"][1])
+                            ) < 0.75
+                            and float(peer["bbox"][0])
+                            <= page.rect.width * 0.30
+                            and float(word[0])
+                            - float(peer["bbox"][0])
+                            >= page.rect.width * 0.25
+                            and leading_speakers_by_line[id(peer)]
+                            and embedded_name
+                            not in leading_speakers_by_line[id(peer)]
+                        ),
+                        [],
+                    )
+                    if not left_peer_names:
+                        continue
+
+                    has_following_word = word_index + 1 < len(line_words)
+                    has_right_fragment = any(
+                        peer is not line
+                        and abs(
+                            float(peer["bbox"][1])
+                            - float(line["bbox"][1])
+                        ) < 0.75
+                        and float(peer["bbox"][0])
+                        >= float(word[2]) + 8
+                        and any(
+                            normalise(span.get("text", ""))
+                            for span in peer.get("spans", [])
+                        )
+                        for peer in original_lines
+                    )
+                    if not (has_following_word or has_right_fragment):
+                        continue
+
+                    name_match = next(
+                        (
+                            match
+                            for match in re.finditer(
+                                re.escape(str(word[4])),
+                                raw_text,
+                            )
+                            if match.start() > 0
+                            and re.search(
+                                r"\s{3,}$",
+                                raw_text[:match.start()],
+                            )
+                        ),
+                        None,
+                    )
+                    if name_match is None:
+                        continue
+
+                    prefix_text = raw_text[:name_match.start()].rstrip()
+                    speaker_text = raw_text[name_match.start():].lstrip()
+                    if not normalise(prefix_text):
+                        continue
+
+                    source_span = nonempty_spans[0]
+                    prefix_bbox = (
+                        float(line["bbox"][0]),
+                        float(line["bbox"][1]),
+                        float(previous_word[2]),
+                        float(line["bbox"][3]),
+                    )
+                    speaker_has_suffix = bool(
+                        normalise(raw_text[name_match.end():])
+                    )
+                    speaker_bbox = (
+                        float(word[0]),
+                        float(line["bbox"][1]),
+                        (
+                            float(line["bbox"][2])
+                            if speaker_has_suffix
+                            else float(word[2])
+                        ),
+                        float(line["bbox"][3]),
+                    )
+
+                    prefix_span = dict(source_span)
+                    prefix_span["text"] = prefix_text
+                    prefix_span["bbox"] = prefix_bbox
+                    prefix_line = dict(line)
+                    prefix_line["bbox"] = prefix_bbox
+                    prefix_line["spans"] = [prefix_span]
+
+                    speaker_span = dict(source_span)
+                    speaker_span["text"] = speaker_text
+                    speaker_span["bbox"] = speaker_bbox
+                    if "origin" in speaker_span:
+                        speaker_span["origin"] = (
+                            speaker_bbox[0],
+                            speaker_span["origin"][1],
+                        )
+                    speaker_line = dict(line)
+                    speaker_line["bbox"] = speaker_bbox
+                    speaker_line["spans"] = [speaker_span]
+                    split_result = (prefix_line, speaker_line)
+                    break
+
+            if split_result is None:
+                expanded_lines.append(line)
+            else:
+                expanded_lines.extend(split_result)
+
+        block["lines"] = expanded_lines
+
+
 def find_split_english_speaker_layout(
     physical_lines,
     possible_characters,
@@ -1209,12 +1602,191 @@ def split_aliases(value):
     ]
 
 
-def split_character_cell(value):
-    """Read one horizontal DCA cell, including names and [aliases]."""
+def split_role_names(value):
+    """Read globally mapped script roles from Character List column B."""
     if value is None:
         return []
 
-    names = []
+    return [
+        normalise(role)
+        for role in re.split(r"[,，、;；|\r\n]+", str(value))
+        if role.strip()
+    ]
+
+
+def split_display_role_names(value):
+    """Read mapped roles while preserving the workbook's visible spelling."""
+    if value is None:
+        return []
+
+    roles = []
+    for role in re.split(r"[,，、;；|\r\n]+", str(value)):
+        display_role = unicodedata.normalize("NFKC", role).strip()
+        if display_role and display_role not in roles:
+            roles.append(display_role)
+
+    return roles
+
+
+def convert_legacy_assignments(project):
+    """One-way conversion of retired assignment sets; never infer new sets."""
+    definitions = project.pop("shared_groups", None) or []
+    if not definitions:
+        return project
+
+    def names(value):
+        # Accept old delimiters without splitting commas inside [aliases].
+        parts, current, depth = [], [], 0
+        for character in str(value or ""):
+            if character == "[":
+                depth += 1
+            elif character == "]":
+                depth = max(0, depth - 1)
+            if depth == 0 and character in ",，、;；|\r\n":
+                if "".join(current).strip():
+                    parts.append("".join(current).strip())
+                current = []
+            else:
+                current.append(character)
+        if "".join(current).strip():
+            parts.append("".join(current).strip())
+        return parts
+
+    def identity(value):
+        entries = split_character_entries(value)
+        return entries[0][0] if entries else ""
+
+    by_name = {}
+    for item in definitions:
+        key = identity(item.get("name", ""))
+        if key:
+            by_name.setdefault(key, []).append(item)
+
+    characters = project.setdefault("characters", [])
+    for item in characters:
+        item["other_characters"] = "\n".join(
+            role for role in names(item.get("other_characters", ""))
+            if identity(role) not in by_name
+        )
+
+    known = {identity(item.get("dca_name", "")) for item in characters}
+    for item in definitions:
+        for name in [str(item.get("name", "")).strip(), *names(item.get("members", ""))]:
+            key = identity(name)
+            if key and key not in known:
+                known.add(key)
+                characters.append({
+                    "id": f"converted-character-{len(characters) + 1}",
+                    "dca_name": name,
+                    "other_characters": "",
+                })
+
+    for state in project.setdefault("states", []):
+        converted_cells = []
+        for cell in state.get("dca_assignments", []):
+            entries = []
+            seen = set()
+            for line in str(cell or "").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                if normalise(line) not in seen:
+                    entries.append(line)
+                    seen.add(normalise(line))
+                for item in by_name.get(identity(line), []):
+                    for member in names(item.get("members", "")):
+                        if normalise(member) not in seen:
+                            entries.append(member)
+                            seen.add(normalise(member))
+            converted_cells.append("\n".join(entries))
+        state["dca_assignments"] = converted_cells
+    return project
+
+
+def read_legacy_assignment_rows(workbook):
+    """Read retired worksheet data only for one-way import conversion."""
+    if "Shared Groups" not in workbook.sheetnames:
+        return None
+
+    worksheet = workbook["Shared Groups"]
+    header_row, columns = _find_header_row_and_columns(
+        worksheet,
+        {
+            "shared group name",
+            "shared group",
+            "group name",
+        },
+    )
+    if header_row is None:
+        return []
+
+    name_column = next(
+        (
+            columns[header]
+            for header in (
+                "shared group name",
+                "shared group",
+                "group name",
+            )
+            if header in columns
+        ),
+        None,
+    )
+    member_column = next(
+        (
+            columns[header]
+            for header in (
+                "dca members — one per line",
+                "dca members one per line",
+                "dca members",
+                "dca names",
+                "members",
+            )
+            if header in columns
+        ),
+        None,
+    )
+    if name_column is None or member_column is None:
+        return []
+
+    rows = []
+    for index, row in enumerate(
+        worksheet.iter_rows(
+            min_row=header_row + 1,
+            values_only=True,
+        ),
+        1,
+    ):
+        name = (
+            unicodedata.normalize("NFKC", str(row[name_column])).strip()
+            if name_column < len(row) and row[name_column] is not None
+            else ""
+        )
+        members = (
+            unicodedata.normalize("NFKC", str(row[member_column])).strip()
+            if member_column < len(row) and row[member_column] is not None
+            else ""
+        )
+        if name or members:
+            rows.append({
+                "id": f"legacy-assignment-{index}",
+                "name": name,
+                "members": members,
+            })
+    return rows
+
+
+def split_character_entries(value, *, preserve_display_names=False):
+    """Read DCA names and normalized state-local aliases.
+
+    Matching callers keep normalized names by default. The inspector-loading
+    path preserves the entered name until its separate display value has been
+    captured; add_template_assignment still normalizes the matching identity.
+    """
+    if value is None:
+        return []
+
+    entries = []
 
     for line in str(value).splitlines():
         line = line.strip()
@@ -1226,17 +1798,305 @@ def split_character_cell(value):
 
         if alias_match:
             character = alias_match.group(1).strip()
-            aliases = alias_match.group(2)
+            aliases = split_aliases(alias_match.group(2))
         else:
             character = line
-            aliases = ""
+            aliases = []
 
         if character:
-            names.append(normalise(character))
+            entries.append((
+                character if preserve_display_names else normalise(character),
+                aliases,
+            ))
 
-        names.extend(split_aliases(aliases))
+    return entries
+
+
+def split_character_cell(value):
+    """Read one horizontal DCA cell, including names and [aliases]."""
+    names = []
+
+    for character, aliases in split_character_entries(value):
+        names.append(character)
+        names.extend(aliases)
 
     return names
+
+
+def load_role_mappings(workbook):
+    """Load optional performer-to-script-role mappings.
+
+    Existing aliases remain local to an individual DCA cell. This separate
+    mapping lets a stable DCA member or performer name such as ``Ben`` match
+    several real script roles such as ``Barber``, ``Butcher``, and ``Coach``
+    without repeating those role names in every state. Every mapped role has
+    exactly one DCA identity; names never create implicit membership lists.
+    """
+    if "Character List" not in workbook.sheetnames:
+        return {}, {}, {}
+
+    worksheet = workbook["Character List"]
+    canonical_headers = {
+        "dca name",
+        "dca name / performer",
+        "dca member / performer",
+        "performer / dca name",
+    }
+    role_headers = {
+        "other script characters played",
+        "script characters played",
+        "script character names",
+        "script roles",
+    }
+    header_row = None
+    canonical_column = None
+    role_column = None
+
+    for cells in worksheet.iter_rows(
+        # XLSX dimensions are optional; read-only sheets may have no max_row.
+        max_row=min(worksheet.max_row or 20, 20)
+    ):
+        headers = [
+            normalise(cell.value) if cell.value is not None else ""
+            for cell in cells
+        ]
+        canonical_column = next(
+            (
+                index
+                for index, header in enumerate(headers)
+                if header in canonical_headers
+            ),
+            None,
+        )
+        role_column = next(
+            (
+                index
+                for index, header in enumerate(headers)
+                if header in role_headers
+            ),
+            None,
+        )
+
+        if canonical_column is not None and role_column is not None:
+            header_row = cells[0].row
+            break
+
+    # Older workbooks have no role-mapping headers. Preserve their exact
+    # behavior and keep Character List as a dropdown-only helper sheet.
+    if header_row is None:
+        return {}, {}, {}
+
+    role_groups = {}
+    role_display_groups = {}
+
+    for row in worksheet.iter_rows(
+        min_row=header_row + 1,
+        values_only=True,
+    ):
+        canonical_value = (
+            row[canonical_column]
+            if canonical_column < len(row)
+            else None
+        )
+        role_value = row[role_column] if role_column < len(row) else None
+        canonical_display = unicodedata.normalize(
+            "NFKC", str(canonical_value or "")
+        ).strip()
+        # A DCA Name may already include an inline alias. Use its primary
+        # name as the identity so Jack [John, Student] can resolve the same
+        # global role mapping as Jack [John]. Keep the full label for display.
+        canonical_match = re.fullmatch(r"(.+?)\s*\[([^\]]+)\]", canonical_display)
+        canonical = normalise(
+            canonical_match.group(1) if canonical_match else canonical_display
+        )
+        name_aliases = (
+            split_display_role_names(canonical_match.group(2))
+            if canonical_match else []
+        )
+
+        if not canonical:
+            continue
+
+        roles = role_groups.setdefault(canonical, [])
+        display_group = role_display_groups.setdefault(
+            canonical,
+            {
+                "performer": canonical_display,
+                "roles": [],
+            },
+        )
+        display_roles_by_key = {
+            normalise(role): role
+            for role in display_group["roles"]
+        }
+
+        for display_role in [*name_aliases, *split_display_role_names(role_value)]:
+            role = normalise(display_role)
+            if role != canonical and role not in roles:
+                roles.append(role)
+            if (
+                role != canonical
+                and role not in display_roles_by_key
+            ):
+                display_group["roles"].append(display_role)
+                display_roles_by_key[role] = display_role
+
+    owners_by_speaker_key = {}
+    canonical_by_speaker_key = {}
+
+    # Register every DCA member first. A role may not silently reuse another
+    # member's name because that remains genuinely ambiguous.
+    for canonical in role_groups:
+        key = speaker_match_key(canonical)
+        existing_owner = canonical_by_speaker_key.get(key)
+        if existing_owner and existing_owner != canonical:
+            raise ValueError(
+                "Character List contains ambiguous DCA names: "
+                f'"{canonical}" conflicts with "{existing_owner}".'
+            )
+        canonical_by_speaker_key[key] = canonical
+        owners_by_speaker_key[key] = [canonical]
+
+    for canonical, roles in role_groups.items():
+        for role in roles:
+            key = speaker_match_key(role)
+            canonical_owner = canonical_by_speaker_key.get(key)
+            if canonical_owner and canonical_owner != canonical:
+                raise ValueError(
+                    "Character List role mapping conflicts with a DCA Name: "
+                    f'role "{role}" under "{canonical}" is already the '
+                    f'DCA Name "{canonical_owner}".'
+                )
+            owners = owners_by_speaker_key.setdefault(key, [])
+            if owners and canonical not in owners:
+                first_owner = role_display_groups[owners[0]]["performer"]
+                current_owner = role_display_groups[canonical]["performer"]
+                raise ValueError(
+                    f'Role "{role}" is assigned to both "{first_owner}" '
+                    f'and "{current_owner}". Give each mapped role one DCA '
+                    "Name, or enter the printed label as its own DCA Name."
+                )
+            if canonical not in owners:
+                owners.append(canonical)
+
+    return role_groups, owners_by_speaker_key, role_display_groups
+
+
+def role_equivalent_names(name, role_groups, owners_by_speaker_key):
+    """Return a DCA identity and every globally mapped script role."""
+    normalised_name = normalise(name)
+    if not normalised_name:
+        return []
+
+    owners = owners_by_speaker_key.get(
+        speaker_match_key(normalised_name),
+        [],
+    )
+    owner = owners[0] if owners else normalised_name
+    names = [owner]
+    names.extend(role_groups.get(owner, []))
+
+    return list(dict.fromkeys(names))
+
+
+def add_dca_reference_assignment(
+    reference_assignments,
+    state_key,
+    performer_key,
+    performer_display,
+    dca,
+):
+    """Keep one complete, display-ready DCA row for the inspector."""
+    state_rows = reference_assignments.setdefault(state_key, {})
+    row = state_rows.setdefault(
+        performer_key,
+        {
+            "dca": [],
+            "performer": performer_display,
+        },
+    )
+    if dca not in row["dca"]:
+        row["dca"].append(dca)
+
+
+def add_template_assignment(
+    assignments,
+    legend_assignments,
+    reference_assignments,
+    state_key,
+    character,
+    dca,
+    role_groups,
+    owners_by_speaker_key,
+    inline_aliases=None,
+    state_display_name=None,
+    performer_display_names=None,
+):
+    """Add one DCA identity and its explicitly mapped script names."""
+    character_display = unicodedata.normalize(
+        "NFKC", str(character or "")
+    ).strip()
+    character = normalise(character_display)
+    if not character:
+        return
+
+    character_owners = owners_by_speaker_key.get(
+        speaker_match_key(character),
+        [],
+    )
+    if not character_owners or character in character_owners:
+        character_owner = character
+    elif len(character_owners) == 1:
+        # Older or manually edited workbooks may place a uniquely mapped
+        # script role in a DCA State cell. Resolving it to its one DCA Name is
+        # deterministic and keeps legends / mapping cards canonical.
+        character_owner = character_owners[0]
+    else:
+        raise ValueError(
+            f'The script role "{character_display}" has more than one DCA Name.'
+        )
+
+    add_assignment(legend_assignments, state_key, character_owner, dca)
+    performer_display_names = performer_display_names or {}
+    add_dca_reference_assignment(
+        reference_assignments,
+        state_key,
+        character_owner,
+        performer_display_names.get(
+            character_owner,
+            character_display,
+        ),
+        dca,
+    )
+    matching_names = role_equivalent_names(
+        character_owner,
+        role_groups,
+        owners_by_speaker_key,
+    )
+
+    for alias in inline_aliases or []:
+        alias = normalise(alias)
+        alias_owners = owners_by_speaker_key.get(
+            speaker_match_key(alias),
+            [],
+        )
+        if alias_owners and character_owner not in alias_owners:
+            owner_text = ", ".join(alias_owners)
+            raise ValueError(
+                "A DCA cell alias conflicts with Character List role "
+                f'mapping: "{alias}" belongs to "{owner_text}", not '
+                f'"{character}".'
+            )
+        if alias and alias not in matching_names:
+            matching_names.append(alias)
+        if alias:
+            # Inline aliases are explicitly state-local and historically
+            # appeared in legends. Keep that behavior while hiding only the
+            # new global performer/role expansion.
+            add_assignment(legend_assignments, state_key, alias, dca)
+
+    for matching_name in matching_names:
+        add_assignment(assignments, state_key, matching_name, dca)
 
 
 def add_assignment(assignments, state_key, character, dca):
@@ -1272,16 +2132,695 @@ def display_dca(dca):
 def load_template(filename, diagnostics=None):
     workbook = load_workbook(filename, data_only=True, read_only=True)
 
-    if "DCA States" not in workbook.sheetnames:
+    try:
+        if read_legacy_assignment_rows(workbook):
+            converted = project_to_workbook(import_excel_project(filename), include_guide=False)
+            try:
+                return _load_template_workbook(converted, diagnostics)
+            finally:
+                converted.close()
+        return _load_template_workbook(workbook, diagnostics)
+    finally:
         workbook.close()
+
+
+PROJECT_SCHEMA_VERSION = 1
+PROJECT_SETTINGS_DEFAULTS = {
+    "marking_style": "Editable Full Marking",
+    "mark_selected_pages": False,
+    "start_page": "",
+    "end_page": "",
+    "number_colour": "Red",
+    "number_size": "Medium",
+    "number_font": "Helvetica",
+    "number_position": "Standard",
+    "number_vertical_position": "Default",
+    "state_colour": "Blue",
+    "state_size": "Medium",
+    "state_font": "PingFang SC",
+    "state_position": "Left Gutter",
+    "legend_position": "Left Gutter",
+    "page_state_display": "Header and Footer",
+    "page_state_text_colour": "Blue",
+    "page_state_text_size": "Medium",
+    "page_state_text_font": "PingFang SC",
+    "page_state_border_colour": "Blue",
+    "show_performer_role_mapping": False,
+}
+
+
+def blank_project(name="Untitled DCA Project"):
+    return {
+        "schema_version": PROJECT_SCHEMA_VERSION,
+        "name": name,
+        "script_path": "",
+        "output_folder": "",
+        "source_excel_path": "",
+        "settings": dict(PROJECT_SETTINGS_DEFAULTS),
+        "characters": [],
+        "states": [],
+    }
+
+
+def read_project_file(filename):
+    with open(filename, encoding="utf-8") as file:
+        project = json.load(file)
+
+    if not isinstance(project, dict):
+        raise ValueError("The DCA Script Marker project file is not valid.")
+    schema_version = project.get("schema_version", PROJECT_SCHEMA_VERSION)
+    if schema_version != PROJECT_SCHEMA_VERSION:
+        raise ValueError(
+            "This DCA Script Marker project uses an unsupported format "
+            f"(version {schema_version})."
+        )
+
+    settings = dict(PROJECT_SETTINGS_DEFAULTS)
+    raw_settings = project.get("settings", {})
+    if isinstance(raw_settings, dict):
+        settings.update(raw_settings)
+    project["settings"] = settings
+    project.setdefault("characters", [])
+    project.setdefault("states", [])
+    project.setdefault("name", "Untitled DCA Project")
+    project.setdefault("script_path", "")
+    project.setdefault("output_folder", "")
+    project.setdefault("source_excel_path", "")
+    return convert_legacy_assignments(project)
+
+
+def _find_header_row_and_columns(worksheet, expected_headers, max_rows=20):
+    # Search the normal bounded header area even when dimensions are omitted.
+    for cells in worksheet.iter_rows(
+        max_row=min(worksheet.max_row or max_rows, max_rows)
+    ):
+        headers = [
+            normalise(cell.value) if cell.value is not None else ""
+            for cell in cells
+        ]
+        columns = {
+            header: index
+            for index, header in enumerate(headers)
+            if header
+        }
+        if any(header in columns for header in expected_headers):
+            return cells[0].row, columns
+    return None, {}
+
+
+def import_excel_project(filename):
+    """Convert a compatible workbook into the Version 2 project format."""
+    workbook = load_workbook(filename, data_only=False, read_only=True)
+    try:
+        if "DCA States" not in workbook.sheetnames:
+            raise ValueError('The Excel file needs a sheet named "DCA States".')
+
+        project_name = os.path.splitext(os.path.basename(filename))[0]
+        project = blank_project(project_name)
+        project["source_excel_path"] = os.path.abspath(filename)
+
+        if "Character List" in workbook.sheetnames:
+            character_sheet = workbook["Character List"]
+            header_row, columns = _find_header_row_and_columns(
+                character_sheet,
+                {
+                    "dca name",
+                    "dca name / performer",
+                    "dca member / performer",
+                    "performer / dca name",
+                },
+            )
+            name_column = next(
+                (
+                    columns[header]
+                    for header in (
+                        "dca name",
+                        "dca name / performer",
+                        "dca member / performer",
+                        "performer / dca name",
+                    )
+                    if header in columns
+                ),
+                None,
+            )
+            role_column = next(
+                (
+                    columns[header]
+                    for header in (
+                        "other script characters played",
+                        "script characters played",
+                        "script character names",
+                        "script roles",
+                    )
+                    if header in columns
+                ),
+                None,
+            )
+            if header_row is not None and name_column is not None:
+                for index, row in enumerate(
+                    character_sheet.iter_rows(
+                        min_row=header_row + 1,
+                        values_only=True,
+                    ),
+                    1,
+                ):
+                    name = (
+                        str(row[name_column]).strip()
+                        if name_column < len(row) and row[name_column] is not None
+                        else ""
+                    )
+                    roles = (
+                        str(row[role_column]).strip()
+                        if role_column is not None
+                        and role_column < len(row)
+                        and row[role_column] is not None
+                        else ""
+                    )
+                    if name:
+                        project["characters"].append({
+                            "id": f"character-{index}",
+                            "dca_name": name,
+                            "other_characters": roles,
+                        })
+
+        legacy_assignments = read_legacy_assignment_rows(workbook)
+        if legacy_assignments:
+            project["shared_groups"] = legacy_assignments
+
+        states_sheet = workbook["DCA States"]
+        header_row, columns = _find_header_row_and_columns(
+            states_sheet,
+            {"dca state"},
+            max_rows=50,
+        )
+        if header_row is None or "dca state" not in columns:
+            raise ValueError(
+                'The "DCA States" sheet needs a "DCA State" header.'
+            )
+
+        def row_value(row, *headers):
+            for header in headers:
+                column = columns.get(header)
+                if column is not None and column < len(row):
+                    value = row[column]
+                    if value is not None:
+                        return str(value).strip()
+            return ""
+
+        for index, row in enumerate(
+            states_sheet.iter_rows(
+                min_row=header_row + 1,
+                values_only=True,
+            ),
+            1,
+        ):
+            state_name = row_value(row, "dca state")
+            cue_character = row_value(
+                row,
+                "start line character",
+                "start cue character",
+                "start cue speaker",
+            )
+            cue_text = row_value(row, "start line text", "start cue text")
+            start_position = row_value(
+                row,
+                "state start position",
+                "start position",
+            ) or "After"
+            page_hint = row_value(row, "script page hint", "page hint")
+            notes = row_value(row, "notes")
+            assignments = []
+            for dca in range(1, 13):
+                assignments.append(row_value(row, f"dca {dca}"))
+
+            if not any(
+                [state_name, cue_character, cue_text, page_hint, notes]
+                + assignments
+            ):
+                continue
+
+            project["states"].append({
+                "id": f"state-{index}",
+                "name": state_name,
+                "start_line_character": cue_character,
+                "start_line_text": cue_text,
+                "start_position": start_position.title(),
+                "page_hint": page_hint,
+                "notes": notes,
+                "dca_assignments": assignments,
+            })
+
+        return convert_legacy_assignments(project)
+    finally:
+        workbook.close()
+
+
+def excel_role_choice(dca_name, role):
+    """Label a macro-free role shortcut without nesting inline alias brackets."""
+    owner = unicodedata.normalize("NFKC", str(dca_name or "")).strip()
+    role = unicodedata.normalize("NFKC", str(role or "")).strip()
+    if not owner or not role:
+        return ""
+    owner_match = re.fullmatch(r"(.+?)\s*\[([^\]]+)\]", owner)
+    primary = owner_match.group(1).strip() if owner_match else owner
+    if normalise(primary) == normalise(role):
+        return ""
+    aliases = split_display_role_names(owner_match.group(2)) if owner_match else []
+    role_match = re.fullmatch(r"(.+?)\s*\[([^\]]+)\]", role)
+    additions = (
+        [role_match.group(1).strip(), *split_display_role_names(role_match.group(2))]
+        if role_match else [role]
+    )
+    keys = {normalise(alias) for alias in aliases}
+    for alias in additions:
+        if normalise(alias) not in keys:
+            aliases.append(alias)
+            keys.add(normalise(alias))
+    return f"{primary} [{', '.join(aliases)}]"
+
+
+def project_to_workbook(project, include_guide=True):
+    """Create a clean, compatible workbook from a Version 2 project."""
+    project = convert_legacy_assignments(copy.deepcopy(project))
+    workbook = Workbook()
+    default_sheet = workbook.active
+    workbook.remove(default_sheet)
+
+    # Keep project exports visually consistent with the bundled Excel
+    # template.  These colours, fonts, borders, and row heights mirror the
+    # current template rather than the darker legacy export palette.
+    font_name = "Carlito"
+    dark_blue = "FF2F5E86"
+    mapping_dark_blue = "FF2F648B"
+    medium_blue = "FF8FAFC8"
+    mapping_medium_blue = "FF93B4CC"
+    pale_blue = "FFF4F8FB"
+    pale_yellow = "FFFFFDF5"
+    info_blue = "FFE8F1F8"
+    dark_text = "FF102A43"
+    mapping_dark_text = "FF16324A"
+    info_text = "FF29475F"
+    white = "FFFFFFFF"
+    header_side = Side(style="thin", color="FFC4D4E2")
+    mapping_header_side = Side(style="thin", color="FFD2E0EA")
+    body_side = Side(style="thin", color="FFD9E2EC")
+    header_border = Border(
+        left=header_side,
+        right=header_side,
+        top=header_side,
+        bottom=header_side,
+    )
+    mapping_header_border = Border(
+        left=mapping_header_side,
+        right=mapping_header_side,
+        top=mapping_header_side,
+        bottom=mapping_header_side,
+    )
+    body_border = Border(
+        left=body_side,
+        right=body_side,
+        top=body_side,
+        bottom=body_side,
+    )
+    workbook._named_styles["Normal"].font = Font(
+        name=font_name,
+        size=11,
+    )
+
+    if include_guide:
+        guide = workbook.create_sheet("How to use")
+        guide.append(["How to use DCA Script Marker Version 2"])
+        guide.append([
+            "Edit this workbook in Excel or import it into DCA Script Marker. "
+            "Character List is optional. A label such as MALE ENSEMBLE can simply "
+            "be its own DCA Name; no membership list is needed. Use Other Script "
+            "Characters Played only when one person plays differently named roles. "
+            "In DCA States, enter the exact start line, Page Hint when needed, and "
+            "active names under DCA 1–12. Put multiple names on separate lines. "
+            "Special DCA-cell example: put TOM and ALL THREE in DCA 1, JERRY and "
+            "ALL THREE in DCA 2, and APPLE and ALL THREE in DCA 3. The printed "
+            "ALL THREE cue receives 1/2/3; confirm or ignore the intentional "
+            "duplicate-assignment reminder."
+        ])
+        guide.append([
+            "可在 Excel 中编辑此工作簿，或导入 DCA Script Marker。Character List 为可选项。"
+            "MALE ENSEMBLE 等标签可直接作为独立的 DCA Name，无需填写成员名单。"
+            "只有同一人饰演名称不同的角色时，才使用 Other Script Characters Played。"
+            "DCA States 请填写准确的开始台词、必要的 Page Hint，并在 DCA 1–12 下填写启用的名称；"
+            "多个名称请分行填写。特别示例：DCA 1 填写 TOM 和 ALL THREE，DCA 2 填写 JERRY "
+            "和 ALL THREE，DCA 3 填写 APPLE 和 ALL THREE。剧本中 ALL THREE 的提示会获得 "
+            "1/2/3；请确认或忽略这项有意设置的重复分配提醒。"
+        ])
+        guide.append([
+            "Find a DCA Name by its script role: enter Jack as the DCA Name and "
+            "Student and Teacher on separate lines under Other Script Characters "
+            "Played. In Excel, choose Jack [Student] or Jack [Teacher]; the cell "
+            "keeps the selected label, without macros. Either choice assigns Jack "
+            "and all his mapped roles to this DCA. Keep the Character List mapping. "
+            "This exported workbook includes the choices known at export; export "
+            "again to refresh them, or type a name manually. The blank template "
+            "updates its choices when Excel recalculates."
+        ])
+        guide.append([
+            "按剧本角色选择 DCA Name：在 Character List 中，将 Jack 填入 DCA Name，"
+            "Student 和 Teacher 分两行填入 Other Script Characters Played。Excel 中选择 "
+            "Jack [Student] 或 Jack [Teacher]，单元格保留所选文字，无需宏。选择任一角色，"
+            "均将 Jack 及其全部对应角色分配至此 DCA。请保留 Character List 中的对应关系。"
+            "此导出工作簿包含导出时已有的选项；请重新导出以更新选项，也可以手动填写名称。"
+            "空白模板的选项会在 Excel 重新计算后更新。"
+        ])
+        guide.column_dimensions["A"].width = 115
+        guide.sheet_view.showGridLines = False
+        for row in guide.iter_rows():
+            for cell in row:
+                cell.font = Font(name=font_name, size=11)
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.border = body_border
+        guide["A1"].font = Font(
+            name=font_name,
+            size=16,
+            bold=True,
+            color=white,
+        )
+        guide["A1"].fill = PatternFill("solid", fgColor=dark_blue)
+        guide["A1"].alignment = Alignment(
+            horizontal="center",
+            vertical="center",
+        )
+        guide["A1"].border = Border()
+        guide.row_dimensions[1].height = 30
+        guide.row_dimensions[2].height = 185
+        guide.row_dimensions[3].height = 170
+        guide.row_dimensions[4].height = 165
+        guide.row_dimensions[5].height = 140
+
+    characters = workbook.create_sheet("Character List")
+    characters.sheet_view.showGridLines = False
+    characters.merge_cells("A1:C1")
+    characters["A1"] = "Character / Performer Role Mapping — 角色 / 演员映射"
+    characters["A1"].font = Font(
+        name=font_name,
+        size=12,
+        bold=True,
+        color=white,
+    )
+    characters["A1"].fill = PatternFill(
+        "solid",
+        fgColor=mapping_dark_blue,
+    )
+    characters["A1"].alignment = Alignment(
+        horizontal="center",
+        vertical="center",
+    )
+    characters["A1"].border = Border(
+        left=Side(style="medium"),
+        right=Side(style="medium"),
+        top=Side(style="medium"),
+    )
+    characters.row_dimensions[1].height = 28
+    characters.append([
+        "DCA Name",
+        "Other Script Characters Played",
+        "Notes",
+    ])
+    for cell in characters[2]:
+        cell.font = Font(
+            name=font_name,
+            size=11,
+            bold=True,
+            italic=True,
+            color=mapping_dark_text,
+        )
+        cell.fill = PatternFill(
+            "solid",
+            fgColor=mapping_medium_blue,
+        )
+        cell.alignment = Alignment(
+            horizontal="center",
+            vertical="center",
+            wrap_text=True,
+        )
+        cell.border = mapping_header_border
+    characters.row_dimensions[2].height = 30
+
+    for row_index, item in enumerate(project.get("characters", []), 3):
+        characters.cell(row_index, 1, str(item.get("dca_name", "")))
+        characters.cell(
+            row_index,
+            2,
+            str(item.get("other_characters", "")),
+        )
+        characters.cell(row_index, 3, "")
+        characters.cell(row_index, 1).fill = PatternFill(
+            "solid", fgColor=pale_blue
+        )
+        characters.cell(row_index, 2).fill = PatternFill(
+            "solid", fgColor=pale_yellow
+        )
+        characters.cell(row_index, 3).fill = PatternFill(
+            "solid", fgColor=pale_blue
+        )
+        for cell in characters[row_index]:
+            cell.font = Font(name=font_name, size=11, color="FF000000")
+            cell.alignment = Alignment(
+                wrap_text=True,
+                vertical="center",
+            )
+            cell.border = body_border
+        role_line_count = max(
+            1,
+            str(item.get("other_characters", "")).count("\n") + 1,
+        )
+        characters.row_dimensions[row_index].height = max(22, 15 * role_line_count)
+
+    # Keep a styled entry row visible when Character List is intentionally
+    # unused.  The sheet remains optional, but the exported workbook still
+    # looks and behaves like the supplied template.
+    if characters.max_row < 3:
+        for column in range(1, 4):
+            cell = characters.cell(3, column)
+            cell.font = Font(name=font_name, size=11, color="FF000000")
+            cell.fill = PatternFill(
+                "solid",
+                fgColor=pale_yellow if column == 2 else pale_blue,
+            )
+            cell.alignment = Alignment(
+                wrap_text=True,
+                vertical="center",
+            )
+            cell.border = body_border
+
+    characters.column_dimensions["A"].width = 32
+    characters.column_dimensions["B"].width = 46
+    characters.column_dimensions["C"].width = 42
+    characters.freeze_panes = None
+    characters.auto_filter.ref = f"A2:C{max(3, characters.max_row)}"
+
+    states = workbook.create_sheet("DCA States")
+    states.sheet_view.showGridLines = False
+    states.merge_cells("A1:R1")
+    states["A1"] = "DCA Script Marker — DCA States"
+    states["A1"].font = Font(
+        name=font_name,
+        size=16,
+        bold=True,
+        color=white,
+    )
+    states["A1"].fill = PatternFill("solid", fgColor=dark_blue)
+    states["A1"].alignment = Alignment(vertical="center")
+    states.row_dimensions[1].height = 30
+    states.merge_cells("A2:R2")
+    states["A2"] = (
+        "Page Hint normally uses the page number printed inside the script. "
+        "Enter multiple names or aliases on separate lines. / Page Hint 通常填写剧本内印刷页码；"
+        "多个名称或别名请分行填写。"
+    )
+    states["A2"].font = Font(
+        name=font_name,
+        size=11,
+        italic=True,
+        color=info_text,
+    )
+    states["A2"].fill = PatternFill("solid", fgColor=info_blue)
+    states["A2"].alignment = Alignment(wrap_text=True, vertical="center")
+    states.row_dimensions[2].height = 36
+    headers = [
+        "DCA State",
+        "Start Line Character",
+        "Start Line Text",
+        "State Start Position",
+        "Page Hint",
+    ] + [f"DCA {index}" for index in range(1, 13)] + ["Notes"]
+    states.append([])
+    states.append(headers)
+    for cell in states[4]:
+        cell.font = Font(
+            name=font_name,
+            size=11,
+            bold=True,
+            color=dark_text,
+        )
+        cell.fill = PatternFill("solid", fgColor=medium_blue)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = header_border
+    states.row_dimensions[4].height = 28
+
+    for row_index, item in enumerate(project.get("states", []), 5):
+        assignments = list(item.get("dca_assignments", []))[:12]
+        assignments += [""] * (12 - len(assignments))
+        values = [
+            item.get("name", ""),
+            item.get("start_line_character", ""),
+            item.get("start_line_text", ""),
+            item.get("start_position", "After"),
+            item.get("page_hint", ""),
+        ] + assignments + [item.get("notes", "")]
+        for column, value in enumerate(values, 1):
+            cell = states.cell(row_index, column, value)
+            cell.font = Font(
+                name=font_name,
+                size=11,
+                bold=(column == 1),
+            )
+            cell.fill = PatternFill(
+                "solid",
+                fgColor=pale_yellow if 6 <= column <= 17 else pale_blue,
+            )
+            cell.alignment = Alignment(
+                horizontal="center" if column in (1, 5) else None,
+                vertical="center",
+                wrap_text=True,
+            )
+            cell.border = body_border
+        states.row_dimensions[row_index].height = max(
+            34,
+            15 * max(
+                [str(value).count("\n") + 1 for value in assignments] or [1]
+            ),
+        )
+
+    if states.max_row < 5:
+        for column in range(1, 19):
+            cell = states.cell(5, column)
+            cell.font = Font(
+                name=font_name,
+                size=11,
+                bold=(column == 1),
+            )
+            cell.fill = PatternFill(
+                "solid",
+                fgColor=pale_yellow if 6 <= column <= 17 else pale_blue,
+            )
+            cell.alignment = Alignment(
+                horizontal="center" if column in (1, 5) else None,
+                vertical="center",
+                wrap_text=True,
+            )
+            cell.border = body_border
+
+    widths = [20, 24, 48, 20, 14] + [18] * 12 + [24]
+    for column, width in enumerate(widths, 1):
+        states.column_dimensions[get_column_letter(column)].width = width
+    states.freeze_panes = None
+    states.auto_filter.ref = f"A4:R{max(5, states.max_row)}"
+
+    position_validation = DataValidation(
+        type="list",
+        formula1='"Before,After"',
+        allow_blank=False,
+    )
+    states.add_data_validation(position_validation)
+    position_validation.add(f"D5:D{max(1000, states.max_row)}")
+
+    validation_choices = []
+    validation_choice_keys = set()
+    for item in project.get("characters", []):
+        dca_name = unicodedata.normalize(
+            "NFKC", str(item.get("dca_name", "") or "")
+        ).strip()
+        dca_key = normalise(dca_name)
+        if dca_key and dca_key not in validation_choice_keys:
+            validation_choices.append(dca_name)
+            validation_choice_keys.add(dca_key)
+
+    # Native .xlsx dropdowns write their visible label. The bracketed role
+    # remains compatible with the marker's existing inline-alias parser.
+    for item in project.get("characters", []):
+        for role in split_display_role_names(item.get("other_characters", "")):
+            choice = excel_role_choice(item.get("dca_name", ""), role)
+            choice_key = normalise(choice)
+            if choice_key and choice_key not in validation_choice_keys:
+                validation_choices.append(choice)
+                validation_choice_keys.add(choice_key)
+
+    # Hidden dropdown source: DCA Names followed by linked script roles.
+    # Names added later in Excel can still be typed directly into a cell.
+    for row_index, choice in enumerate(validation_choices, 3):
+        characters.cell(row_index, 4, choice)
+    characters.column_dimensions["D"].hidden = True
+    validation_last_row = max(3, 2 + len(validation_choices))
+
+    character_name_range = DefinedName(
+        "DCANameList",
+        attr_text=(
+            "'Character List'!$D$3:"
+            f"$D${validation_last_row}"
+        ),
+    )
+    if hasattr(workbook.defined_names, "add"):
+        workbook.defined_names.add(character_name_range)
+    else:
+        workbook.defined_names.append(character_name_range)
+    name_validation = DataValidation(
+        type="list",
+        formula1="DCANameList",
+        allow_blank=True,
+    )
+    states.add_data_validation(name_validation)
+    name_validation.add(f"F5:Q{max(1000, states.max_row)}")
+    return workbook
+
+
+def load_project(filename, diagnostics=None):
+    project = read_project_file(filename)
+    workbook = project_to_workbook(project, include_guide=False)
+    try:
+        return _load_template_workbook(workbook, diagnostics)
+    finally:
+        workbook.close()
+
+
+def export_project_excel(project_filename, output_filename):
+    project = read_project_file(project_filename)
+    workbook = project_to_workbook(project, include_guide=True)
+    try:
+        workbook.save(output_filename)
+    finally:
+        workbook.close()
+
+
+def _load_template_workbook(workbook, diagnostics=None):
+
+    if "DCA States" not in workbook.sheetnames:
         raise ValueError(
             'The Excel file needs a sheet named "DCA States".'
         )
 
+    (
+        role_groups,
+        owner_by_speaker_key,
+        role_display_groups,
+    ) = load_role_mappings(workbook)
+    performer_display_names = {
+        performer_key: display_group["performer"]
+        for performer_key, display_group in role_display_groups.items()
+    }
     states_sheet = workbook["DCA States"]
     state_rows = read_sheet_rows(states_sheet)
     states = []
     assignments = {}
+    legend_assignments = {}
+    dca_reference_assignments = {}
     named_states_without_cues = []
     cues_without_state_names = []
 
@@ -1327,6 +2866,11 @@ def load_template(filename, diagnostics=None):
             cues_without_state_names.append(cue_text)
 
         if state_name and cue_text:
+            cue_speaker_names = role_equivalent_names(
+                cue_speaker,
+                role_groups,
+                owner_by_speaker_key,
+            )
             states.append({
                 "name": state_name,
                 "key": normalise(state_name),
@@ -1335,6 +2879,7 @@ def load_template(filename, diagnostics=None):
                 # character, which removes ambiguity when the same line is
                 # sung or spoken by more than one person.
                 "cue_speaker": normalise(cue_speaker),
+                "cue_speaker_names": cue_speaker_names,
                 "position": start_position,
                 "page_hint": str(page_hint).strip()
                 if page_hint is not None else "",
@@ -1351,13 +2896,21 @@ def load_template(filename, diagnostics=None):
 
             if state_name and character and dca:
                 state_key = normalise(state_name)
-                character_names = [normalise(character)]
-                character_names.extend(
-                    split_aliases(row.get("aliases", ""))
+                add_template_assignment(
+                    assignments,
+                    legend_assignments,
+                    dca_reference_assignments,
+                    state_key,
+                    character,
+                    dca,
+                    role_groups,
+                    owner_by_speaker_key,
+                    inline_aliases=split_aliases(
+                        row.get("aliases", "")
+                    ),
+                    state_display_name=state_name,
+                    performer_display_names=performer_display_names,
                 )
-
-                for name in character_names:
-                    add_assignment(assignments, state_key, name, dca)
     else:
         # Reads the new horizontal template: DCA 1, DCA 2, etc.
         for row in state_rows:
@@ -1376,13 +2929,208 @@ def load_template(filename, diagnostics=None):
 
                 dca = dca_match.group(1)
 
-                for character in split_character_cell(cell_value):
-                    add_assignment(assignments, state_key, character, dca)
+                for character, inline_aliases in split_character_entries(
+                    cell_value,
+                    preserve_display_names=True,
+                ):
+                    add_template_assignment(
+                        assignments,
+                        legend_assignments,
+                        dca_reference_assignments,
+                        state_key,
+                        character,
+                        dca,
+                        role_groups,
+                        owner_by_speaker_key,
+                        inline_aliases=inline_aliases,
+                        state_display_name=state_name,
+                        performer_display_names=performer_display_names,
+                        )
+
+    for state in states:
+        # Matching uses the expanded role names, while legends continue to
+        # show the single DCA identity the user selected in the workbook.
+        state["legend_assignments"] = legend_assignments.get(
+            state["key"],
+            {},
+        )
+        state["performer_role_rows"] = []
+
+        for performer_key, display_group in role_display_groups.items():
+            roles = display_group.get("roles", [])
+            dca = state["legend_assignments"].get(performer_key)
+
+            # The reference card is deliberately limited to genuine global
+            # Character List mappings. Ordinary DCA assignments and inline
+            # [aliases] remain out of the card so its meaning stays clear.
+            if not roles or dca is None:
+                continue
+
+            state["performer_role_rows"].append({
+                "dca": list(dca) if isinstance(dca, list) else [dca],
+                "performer": display_group["performer"],
+                "roles": list(roles),
+            })
+
+        state["performer_role_rows"].sort(
+            key=lambda row: (
+                int(row["dca"][0])
+                if row["dca"] and str(row["dca"][0]).isdigit()
+                else 999,
+                str(row["performer"]).casefold(),
+            )
+        )
+
+        state["dca_reference_rows"] = []
+        for performer_key, reference_row in (
+            dca_reference_assignments.get(state["key"], {}).items()
+        ):
+            display_group = role_display_groups.get(performer_key, {})
+            state["dca_reference_rows"].append({
+                "dca": list(reference_row["dca"]),
+                "performer": display_group.get(
+                    "performer",
+                    reference_row["performer"],
+                ),
+                "roles": list(display_group.get("roles", [])),
+            })
+
+        state["dca_reference_rows"].sort(
+            key=lambda row: (
+                int(row["dca"][0])
+                if row["dca"] and str(row["dca"][0]).isdigit()
+                else 999,
+                str(row["performer"]).casefold(),
+            )
+        )
 
     if diagnostics is not None:
         configured_state_keys = {
             state["key"] for state in states
         }
+        state_display_names = {
+            state["key"]: state["name"] for state in states
+        }
+        assignment_gaps = []
+        duplicate_dca_assignments = []
+        duplicate_assignment_keys = set()
+
+        for state_key, state_rows in dca_reference_assignments.items():
+            for reference_row in state_rows.values():
+                dcas = list(dict.fromkeys(
+                    str(dca).strip()
+                    for dca in reference_row.get("dca", [])
+                    if str(dca).strip()
+                ))
+                if len(dcas) < 2:
+                    continue
+                duplicate_key = (
+                    state_key,
+                    speaker_match_key(reference_row.get("performer", "")),
+                )
+                duplicate_assignment_keys.add(duplicate_key)
+                duplicate_dca_assignments.append({
+                    "state_key": state_key,
+                    "state_name": state_display_names.get(
+                        state_key,
+                        state_key,
+                    ),
+                    "dca_name": reference_row.get("performer", ""),
+                    "dcas": sorted(
+                        dcas,
+                        key=lambda value: (
+                            0,
+                            int(value),
+                        ) if value.isdigit() else (1, value),
+                    ),
+                })
+
+        # Also check resolved DCA identities for repeated assignments.
+        # Warnings remain advisory so intentional overlaps are allowed.
+        for state_key, state_assignments in assignments.items():
+            for performer_key, dca_values in state_assignments.items():
+                if performer_key not in performer_display_names:
+                    continue
+                dcas = list(dict.fromkeys(
+                    str(dca).strip()
+                    for dca in (
+                        dca_values
+                        if isinstance(dca_values, list)
+                        else [dca_values]
+                    )
+                    if str(dca).strip()
+                ))
+                duplicate_key = (
+                    state_key,
+                    speaker_match_key(performer_key),
+                )
+                if (
+                    len(dcas) < 2
+                    or duplicate_key in duplicate_assignment_keys
+                ):
+                    continue
+                duplicate_assignment_keys.add(duplicate_key)
+                duplicate_dca_assignments.append({
+                    "state_key": state_key,
+                    "state_name": state_display_names.get(
+                        state_key,
+                        state_key,
+                    ),
+                    "dca_name": performer_display_names.get(
+                        performer_key,
+                        performer_key,
+                    ),
+                    "dcas": sorted(
+                        dcas,
+                        key=lambda value: (
+                            0,
+                            int(value),
+                        ) if value.isdigit() else (1, value),
+                    ),
+                })
+
+        for state_key, state_assignments in legend_assignments.items():
+            assigned_dcas = set()
+
+            for dca_values in state_assignments.values():
+                values = (
+                    dca_values
+                    if isinstance(dca_values, list)
+                    else [dca_values]
+                )
+
+                for dca in values:
+                    dca_text = str(dca).strip()
+                    if dca_text.isdigit():
+                        assigned_dcas.add(int(dca_text))
+
+            if len(assigned_dcas) < 2:
+                continue
+
+            first_dca = min(assigned_dcas)
+            last_dca = max(assigned_dcas)
+            missing_dcas = [
+                dca
+                for dca in range(first_dca, last_dca + 1)
+                if dca not in assigned_dcas
+            ]
+
+            if missing_dcas:
+                assignment_gaps.append({
+                    "state_key": state_key,
+                    "state_name": state_display_names.get(
+                        state_key,
+                        state_key,
+                    ),
+                    "missing_dcas": missing_dcas,
+                    "first_dca": first_dca,
+                    "last_dca": last_dca,
+                })
+
+        diagnostics["assignment_gaps"] = assignment_gaps
+        diagnostics["duplicate_dca_assignments"] = (
+            duplicate_dca_assignments
+        )
         diagnostics["named_states_without_cues"] = list(
             dict.fromkeys(named_states_without_cues)
         )
@@ -1394,8 +3142,13 @@ def load_template(filename, diagnostics=None):
             for state_key, state_assignments in assignments.items()
             if state_assignments and state_key not in configured_state_keys
         )
+        diagnostics["role_mapping_members"] = sum(
+            bool(roles) for roles in role_groups.values()
+        )
+        diagnostics["role_mapping_roles"] = sum(
+            len(roles) for roles in role_groups.values()
+        )
 
-    workbook.close()
     return states, assignments
 
 
@@ -1476,13 +3229,13 @@ def cue_speaker_matches(state, speaker_names):
     if not speaker_names:
         return False
 
-    required_key = speaker_match_key(required_speaker)
-    required_base_key = speaker_base_key(required_speaker)
+    required_names = state.get("cue_speaker_names") or [required_speaker]
 
     return any(
-        speaker_match_key(name) == required_key
-        or speaker_base_key(name) == required_base_key
+        speaker_match_key(name) == speaker_match_key(required_name)
+        or speaker_base_key(name) == speaker_base_key(required_name)
         for name in speaker_names
+        for required_name in required_names
     )
 
 
@@ -1644,6 +3397,26 @@ def find_page_hints(page, pdf_page_number, page_text=None):
             ):
                 hints.add(decorated_footer_number.group(1))
 
+            # Some scripts print the current script page together with the
+            # document total, for example ``4/47`` or ``Page 4 of 47``. The
+            # first number is still the user's Script Page Hint. Accept this
+            # only as a complete line in the guarded header/footer bands so a
+            # fraction or cue number inside the script body cannot activate a
+            # state on the wrong page.
+            page_counter = re.fullmatch(
+                r"(?:page\s*)?([0-9]{1,4})\s*(?:/|of)\s*[0-9]{1,4}",
+                line_value,
+                flags=re.IGNORECASE,
+            )
+            if (
+                page_counter
+                and (
+                    line["bbox"][3] <= upper_page_area
+                    or line["bbox"][1] >= decorated_footer_area
+                )
+            ):
+                hints.add(page_counter.group(1))
+
             for span in line["spans"]:
                 value = str(span["text"]).strip()
                 is_footer_number = (
@@ -1750,8 +3523,245 @@ def load_ocr_pages(ocr_json_file, document):
         pages.append({"blocks": [{"lines": lines}]})
     return pages
 
+
+def build_performer_role_mapping_text(state):
+    """Build the compact reference card shown for one activated state."""
+    rows = state.get("performer_role_rows", [])
+    if not rows:
+        return ""
+
+    lines = [f'{state["name"]} - Performer / Role Mapping']
+    for row in rows:
+        lines.append(
+            f'DCA {display_dca(row["dca"])} | {row["performer"]}: '
+            + " / ".join(row["roles"])
+        )
+
+    return "\n".join(lines)
+
+
+def add_bordered_freetext_annotation(
+    document,
+    page,
+    rectangle,
+    text,
+    fontsize,
+    font_name,
+    font_file,
+    text_colour,
+    border_colour,
+    align=0,
+    bold=False,
+):
+    """Create one movable annotation containing both text and its border."""
+    if border_colour == text_colour:
+        annotation = page.add_freetext_annot(
+            rectangle,
+            text,
+            fontsize=fontsize,
+            fontname=font_name,
+            text_color=text_colour,
+            fill_color=None,
+            align=align,
+        )
+        annotation.set_border(width=0.8)
+        annotation.update()
+        return annotation
+
+    alignment = {0: "left", 1: "center", 2: "right"}.get(align, "left")
+    font_weight = "bold" if bold else "normal"
+    text_style = (
+        "font-family: "
+        f"{rich_text_font_family(font_name, font_file)}; "
+        f"font-size: {fontsize:g}pt; "
+        f"font-weight: {font_weight}; "
+        f"color: {css_colour(text_colour)}; "
+        f"text-align: {alignment}; "
+        "margin: 0; padding: 0; line-height: 1.15;"
+    )
+    escaped_html = "<br/>".join(
+        html.escape(line) for line in text.splitlines()
+    )
+    annotation = page.add_freetext_annot(
+        rectangle,
+        escaped_html,
+        richtext=True,
+        style=text_style,
+        border_width=0.8,
+        fill_color=None,
+        align=align,
+    )
+    rich_content = (
+        '<?xml version="1.0"?>'
+        '<body xmlns="http://www.w3.org/1999/xhtml" '
+        'xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/" '
+        'xfa:contentType="text/html" '
+        'xfa:APIVersion="Acrobat:8.0.0" '
+        'xfa:spec="2.4">'
+        f"{escaped_html}</body>"
+    )
+    document.xref_set_key(
+        annotation.xref,
+        "RC",
+        fitz.get_pdf_str(rich_content),
+    )
+    annotation.update(text_color=border_colour)
+    document.xref_set_key(
+        annotation.xref,
+        "Contents",
+        fitz.get_pdf_str(text),
+    )
+    return annotation
+
+
+def rectangle_intersection_area(first, second):
+    intersection = fitz.Rect(first)
+    intersection.intersect(fitz.Rect(second))
+    if intersection.is_empty:
+        return 0
+    return intersection.width * intersection.height
+
+
+def choose_performer_role_card_box(page, width, height):
+    """Prefer the upper-left, while avoiding existing text and annotations."""
+    page_rect = fitz.Rect(page.rect)
+    horizontal_margin = 18
+    vertical_margin = 42
+    width = min(width, max(80, page_rect.width - 2 * horizontal_margin))
+    height = min(height, max(40, page_rect.height - 2 * vertical_margin))
+    right_x = max(horizontal_margin, page_rect.width - horizontal_margin - width)
+    bottom_y = max(vertical_margin, page_rect.height - vertical_margin - height)
+
+    occupied = []
+    for block in page.get_text("blocks"):
+        block_rect = fitz.Rect(block[:4])
+        if block_rect.is_empty:
+            continue
+        occupied.append(
+            fitz.Rect(
+                max(page_rect.x0, block_rect.x0 - 3),
+                max(page_rect.y0, block_rect.y0 - 3),
+                min(page_rect.x1, block_rect.x1 + 3),
+                min(page_rect.y1, block_rect.y1 + 3),
+            )
+        )
+
+    for annotation in page.annots() or []:
+        occupied.append(fitz.Rect(annotation.rect))
+
+    candidates = [
+        fitz.Rect(horizontal_margin, vertical_margin, horizontal_margin + width, vertical_margin + height),
+        fitz.Rect(right_x, vertical_margin, right_x + width, vertical_margin + height),
+        fitz.Rect(horizontal_margin, bottom_y, horizontal_margin + width, bottom_y + height),
+        fitz.Rect(right_x, bottom_y, right_x + width, bottom_y + height),
+    ]
+
+    x_positions = list(dict.fromkeys([
+        horizontal_margin,
+        right_x,
+        max(horizontal_margin, (page_rect.width - width) / 2),
+    ]))
+    maximum_y = max(vertical_margin, page_rect.height - vertical_margin - height)
+    y = vertical_margin
+    while y <= maximum_y + 0.1:
+        for x in x_positions:
+            candidate = fitz.Rect(x, y, x + width, y + height)
+            if candidate not in candidates:
+                candidates.append(candidate)
+        y += 12
+
+    best_candidate = candidates[0]
+    best_score = math.inf
+    for candidate in candidates:
+        score = sum(
+            rectangle_intersection_area(candidate, rectangle)
+            for rectangle in occupied
+        )
+        if score == 0:
+            return candidate
+        if score < best_score:
+            best_candidate = candidate
+            best_score = score
+
+    return best_candidate
+
+
+def add_performer_role_mapping_card(document, page, state, state_style):
+    """Add one editable performer/role reference card to a PDF page."""
+    text = build_performer_role_mapping_text(state)
+    if not text:
+        return None
+
+    text_colour = state_style.get(
+        "page_header_footer_text_colour",
+        state_style.get("colour", STATE_COLOUR),
+    )
+    border_colour = state_style.get(
+        "page_header_footer_border_colour",
+        text_colour,
+    )
+    font_name = state_style.get(
+        "page_header_footer_font_name",
+        state_style.get("font_name", "heiti"),
+    )
+    font_file = state_style.get(
+        "page_header_footer_font_file",
+        state_style.get("font_file", CHINESE_FONT_FILE),
+    )
+    font_size = max(
+        7,
+        min(
+            9.5,
+            state_style.get(
+                "page_header_footer_size",
+                state_style.get("size", 12),
+            ) * 0.68,
+        ),
+    )
+
+    if contains_cjk(text):
+        font_name = "heiti"
+        font_file = CHINESE_FONT_FILE
+
+    text_font = (
+        fitz.Font(fontfile=font_file)
+        if font_file
+        else fitz.Font(fontname=font_name)
+    )
+    card_width = min(
+        250,
+        max(80, page.rect.width - 36),
+        max(205, page.rect.width * 0.42),
+    )
+    usable_width = max(60, card_width - 14)
+    visual_line_count = 0
+    for line in text.splitlines():
+        line_width = text_font.text_length(line or " ", fontsize=font_size)
+        visual_line_count += max(1, math.ceil(line_width / usable_width))
+    card_height = max(42, 14 + visual_line_count * font_size * 1.28)
+    card_box = choose_performer_role_card_box(
+        page,
+        card_width,
+        card_height,
+    )
+
+    return add_bordered_freetext_annotation(
+        document,
+        page,
+        card_box,
+        text,
+        font_size,
+        font_name,
+        font_file,
+        text_colour,
+        border_colour,
+        align=0,
+    )
+
 def build_legend_text(state, assignments):
-    state_assignments = assignments.get(state["key"], {})
+    state_assignments = state.get("legend_assignments")
+    if state_assignments is None:
+        state_assignments = assignments.get(state["key"], {})
 
     legend_items = sorted(
         state_assignments.items(),
@@ -1848,6 +3858,8 @@ def mark_pdf(
     marked_page_counts = {}
     marked_cue_counts = {}
     state_activation_pages = {}
+    performer_role_mapping_pages = {}
+    performer_role_mapping_states = set()
     unassigned_known_speakers = []
     unassigned_known_speaker_keys = set()
     number_style = number_style or {}
@@ -1890,6 +3902,10 @@ def mark_pdf(
         CHINESE_FONT_FILE,
     )
     state_names = {state["key"]: state["name"] for state in states}
+    states_by_key = {state["key"]: state for state in states}
+    show_performer_role_mapping = bool(
+        state_style.get("show_performer_role_mapping", False)
+    )
     all_template_characters = {
         character
         for state_assignments in assignments.values()
@@ -1920,6 +3936,16 @@ def mark_pdf(
             if ocr_pages is not None
             else page.get_text("dict")
         )
+        visible_span_left_edges = {}
+        if ocr_pages is None:
+            visible_span_left_edges = padded_span_visible_left_edges(
+                page, page_text
+            )
+            split_embedded_right_speaker_lines(
+                page,
+                page_text,
+                all_template_characters,
+            )
         page_is_cast_reference = page_has_cast_reference_heading(page_text)
         page_hint_values = find_page_hints(
             page, page_number, page_text=page_text
@@ -2002,6 +4028,23 @@ def mark_pdf(
                     )
                     for grouped in current_group
                 )
+                current_group_leading_names = [
+                    name
+                    for grouped in current_group
+                    for name in get_leading_known_speaker_names(
+                        "".join(
+                            span["text"]
+                            for span in grouped["spans"]
+                        ),
+                        all_template_characters,
+                    )
+                ]
+                candidate_leading_names = (
+                    get_leading_known_speaker_names(
+                        candidate_text,
+                        all_template_characters,
+                    )
+                )
                 close_speaker_columns = (
                     current_group
                     and gap > 45
@@ -2009,6 +4052,20 @@ def mark_pdf(
                     and is_standalone_speaker_label(
                         candidate_text,
                         all_template_characters,
+                    )
+                    and not speaker_label_continues(current_group_text)
+                )
+                tight_parallel_speaker_columns = (
+                    current_group
+                    and gap > 24
+                    and candidate_left >= page.rect.width * 0.45
+                    and candidate_left
+                    - float(current_group[0]["bbox"][0])
+                    >= page.rect.width * 0.30
+                    and current_group_leading_names
+                    and candidate_leading_names
+                    and not set(current_group_leading_names).intersection(
+                        candidate_leading_names
                     )
                     and not speaker_label_continues(current_group_text)
                 )
@@ -2022,6 +4079,7 @@ def mark_pdf(
                 if current_group and (
                     gap > 60
                     or close_speaker_columns
+                    or tight_parallel_speaker_columns
                     or right_hand_split_column
                 ):
                     cue_groups.append(current_group)
@@ -2780,6 +4838,10 @@ def mark_pdf(
                                     dca_values.append(value)
                         dca = display_dca(dca_values)
                         name_box = fitz.Rect(span["bbox"])
+                        name_box.x0 = visible_span_left_edges.get(
+                            (tuple(span["bbox"]), span.get("text", "")),
+                            name_box.x0,
+                        )
 
                         number_right = max(36, name_box.x0 - number_gap)
                         number_font_size = max(
@@ -3085,6 +5147,43 @@ def mark_pdf(
                             color=page_state_text_colour,
                         )
 
+        if page_is_selected and show_performer_role_mapping:
+            mapping_states_for_page = []
+            first_selected_page = start_page or 1
+
+            # A partial export may begin after a state was activated. Carry
+            # that active state's reference card onto the first selected page
+            # so the excerpt remains understandable without the workbook.
+            if page_number == first_selected_page and page_start_state:
+                mapping_states_for_page.append(page_start_state)
+
+            mapping_states_for_page.extend(
+                state_key
+                for state_key, activation_page
+                in state_activation_pages.items()
+                if activation_page == page_number
+            )
+
+            for state_key in dict.fromkeys(mapping_states_for_page):
+                if state_key in performer_role_mapping_states:
+                    continue
+
+                state = states_by_key.get(state_key)
+                if not state or not state.get("performer_role_rows"):
+                    continue
+
+                annotation = add_performer_role_mapping_card(
+                    document,
+                    page,
+                    state,
+                    state_style,
+                )
+                if annotation is None:
+                    continue
+
+                performer_role_mapping_states.add(state_key)
+                performer_role_mapping_pages[state_key] = page_number
+
     # Rebuild and compress the finished PDF, then atomically place the complete
     # file at its destination. This keeps the previous output intact if saving
     # fails and gives PDF viewers one replacement event instead of a delete
@@ -3101,6 +5200,9 @@ def mark_pdf(
             ),
             "full_document": start_page is None and end_page is None,
             "state_activation_pages": state_activation_pages,
+            "performer_role_mapping_pages": (
+                performer_role_mapping_pages
+            ),
             "marked_pages": sorted(marked_pages),
             "marked_page_counts": {
                 str(page): marked_page_counts[page]
@@ -3215,8 +5317,9 @@ def build_review_notices(
             "critical" if full_document else "warning",
             "A DCA State was activated, but no dialogue DCA numbers were "
             "placed. The speaker-label layout may not be recognised, or "
-            "script names and aliases may not match the workbook's DCA "
-            "assignments. Confirm that the PDF text is selectable before use.",
+            "script names and aliases, or Performer / Role Mappings, may not "
+            "match the workbook's DCA assignments. Confirm that the PDF "
+            "text is selectable before use.",
         )
 
     cues_without_names = diagnostics.get(
@@ -3239,6 +5342,61 @@ def build_review_notices(
             "warning",
             f"DCA assignments exist for {len(assignment_states_without_cues)} "
             "state row(s) that have no usable start cue.",
+        )
+
+    assignment_gaps = diagnostics.get("assignment_gaps", [])
+    if assignment_gaps:
+        examples = []
+        for gap in assignment_gaps[:3]:
+            missing = ", ".join(
+                f"DCA {dca}" for dca in gap.get("missing_dcas", [])
+            )
+            examples.append(
+                f'{gap.get("state_name", "Unknown state")}: {missing} '
+                f'is blank between DCA {gap.get("first_dca", "?")} and '
+                f'DCA {gap.get("last_dca", "?")}'
+            )
+
+        remaining = len(assignment_gaps) - len(examples)
+        remaining_text = (
+            f"; and {remaining} more state(s)"
+            if remaining > 0 else ""
+        )
+        add_notice(
+            "DCA_ASSIGNMENT_GAPS",
+            "warning",
+            f"{len(assignment_gaps)} DCA State row(s) contain an empty DCA "
+            "column between populated DCA columns. This may be intentional, "
+            "but it can also mean an assignment was accidentally missed. "
+            f'Confirm: {"; ".join(examples)}{remaining_text}.'
+        )
+
+    duplicate_dca_assignments = diagnostics.get(
+        "duplicate_dca_assignments", []
+    )
+    if duplicate_dca_assignments:
+        examples = []
+        for duplicate in duplicate_dca_assignments[:4]:
+            dcas = "/".join(
+                f'DCA {dca}' for dca in duplicate.get("dcas", [])
+            )
+            examples.append(
+                f'{duplicate.get("state_name", "Unknown state")}: '
+                f'{duplicate.get("dca_name", "Unknown DCA Name")} '
+                f'appears in {dcas}'
+            )
+        remaining = len(duplicate_dca_assignments) - len(examples)
+        remaining_text = (
+            f"; and {remaining} more assignment(s)"
+            if remaining > 0 else ""
+        )
+        add_notice(
+            "DUPLICATE_DCA_ASSIGNMENTS",
+            "warning",
+            f"{len(duplicate_dca_assignments)} DCA Name assignment(s) "
+            "appear in more than one DCA column in the same state. This may "
+            "be intentional, so generation continued. Confirm before use: "
+            f'{"; ".join(examples)}{remaining_text}.'
         )
 
     # A repeated cue can legitimately appear on another page while the state
@@ -3518,6 +5676,7 @@ def run_marker(
     output_mode="replace",
     result_json_file=None,
     result_data=None,
+    project_file=None,
 ):
     original_name = os.path.splitext(
         os.path.basename(pdf_file)
@@ -3556,10 +5715,16 @@ def run_marker(
             message="Data Validation extension is not supported.*",
             category=UserWarning,
         )
-        states, assignments = load_template(
-            template_file,
-            diagnostics=diagnostics,
-        )
+        if project_file:
+            states, assignments = load_project(
+                project_file,
+                diagnostics=diagnostics,
+            )
+        else:
+            states, assignments = load_template(
+                template_file,
+                diagnostics=diagnostics,
+            )
     marked_count, unmatched_names, activated_states = mark_pdf(
         states,
         assignments,
@@ -3632,6 +5797,9 @@ def run_marker(
                 "state_activation_pages", {}
             )
         },
+        "performer_role_mapping_pages": diagnostics.get(
+            "performer_role_mapping_pages", {}
+        ),
         "marked_pages": diagnostics.get("marked_pages", []),
         "marked_page_counts": diagnostics.get(
             "marked_page_counts", {}
@@ -3663,6 +5831,19 @@ if __name__ == "__main__":
         help="Report the bundled runtime versions and architecture, then exit",
     )
     parser.add_argument("--template", help="Path to the DCA Excel template")
+    parser.add_argument(
+        "--project",
+        help="Path to a Version 2 DCA Script Marker project (.dcamarker)",
+    )
+    parser.add_argument(
+        "--import-excel",
+        action="store_true",
+        help="Convert --template into Version 2 project JSON and exit",
+    )
+    parser.add_argument(
+        "--export-excel",
+        help="Export --project to the specified Excel workbook and exit",
+    )
     parser.add_argument("--script", help="Path to the script PDF")
     parser.add_argument("--output", help="Folder for the marked PDF")
     parser.add_argument(
@@ -3686,6 +5867,14 @@ if __name__ == "__main__":
         "--list-legends",
         action="store_true",
         help="Print DCA State legend text as JSON and exit",
+    )
+    parser.add_argument(
+        "--list-role-mappings",
+        action="store_true",
+        help=(
+            "Print every active DCA Name in each state, including optional "
+            "Other Script Characters Played, as JSON and exit"
+        ),
     )
     parser.add_argument(
         "--legend-overrides-file",
@@ -3772,6 +5961,14 @@ if __name__ == "__main__":
         help="Border colour for page header/footer DCA State labels",
     )
     parser.add_argument(
+        "--show-performer-role-mapping",
+        action="store_true",
+        help=(
+            "Show a movable Character List performer/role mapping on the "
+            "first selected page where each DCA State is active"
+        ),
+    )
+    parser.add_argument(
         "--legend-position",
         choices=["Left Gutter", "Near Script"],
         default="Left Gutter",
@@ -3800,6 +5997,22 @@ if __name__ == "__main__":
     )
     arguments = parser.parse_args()
 
+    if arguments.import_excel:
+        if not arguments.template:
+            parser.error("--template is required with --import-excel")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            project = import_excel_project(arguments.template)
+        print(json.dumps(project, ensure_ascii=False, indent=2))
+        raise SystemExit(0)
+
+    if arguments.export_excel:
+        if not arguments.project:
+            parser.error("--project is required with --export-excel")
+        export_project_excel(arguments.project, arguments.export_excel)
+        print(f"Excel workbook exported: {arguments.export_excel}")
+        raise SystemExit(0)
+
     if arguments.self_test:
         print(json.dumps({
             "ok": True,
@@ -3817,13 +6030,18 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     if arguments.list_legends:
-        if not arguments.template:
-            parser.error("--template is required with --list-legends")
+        if not arguments.template and not arguments.project:
+            parser.error(
+                "--template or --project is required with --list-legends"
+            )
         # Excel may report an unsupported validation-extension warning. The
         # Mac app expects clean JSON here, so do not send that warning to it.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
-            states, assignments = load_template(arguments.template)
+            if arguments.project:
+                states, assignments = load_project(arguments.project)
+            else:
+                states, assignments = load_template(arguments.template)
         legends = [
             {
                 "key": state["key"],
@@ -3835,10 +6053,44 @@ if __name__ == "__main__":
         print(json.dumps(legends, ensure_ascii=False))
         raise SystemExit(0)
 
+    if arguments.list_role_mappings:
+        if not arguments.template and not arguments.project:
+            parser.error(
+                "--template or --project is required with "
+                "--list-role-mappings"
+            )
+        # The floating Mac inspector needs only workbook data. Keep this
+        # command read-only and independent from a script PDF or output folder.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            if arguments.project:
+                states, _assignments = load_project(arguments.project)
+            else:
+                states, _assignments = load_template(arguments.template)
+        role_mappings = [
+            {
+                "id": f'{state["key"]}::{index}',
+                "key": state["key"],
+                "name": state["name"],
+                "page_hint": state.get("page_hint", ""),
+                "rows": [
+                    {
+                        "dca": display_dca(row["dca"]),
+                        "performer": row["performer"],
+                        "roles": row["roles"],
+                    }
+                    for row in state.get("dca_reference_rows", [])
+                ],
+            }
+            for index, state in enumerate(states)
+        ]
+        print(json.dumps(role_mappings, ensure_ascii=False))
+        raise SystemExit(0)
+
     completion_result = {}
 
     # With no command-line options, keep the original simple test behaviour.
-    if not arguments.template:
+    if not arguments.template and not arguments.project:
         marked_count, output_file, report_file = run_marker(
             TEMPLATE_FILE,
             PDF_FILE,
@@ -3847,7 +6099,10 @@ if __name__ == "__main__":
         )
     else:
         if not arguments.script or not arguments.output:
-            parser.error("--template, --script, and --output must be used together")
+            parser.error(
+                "--template/--project, --script, and --output must be "
+                "used together"
+            )
         if arguments.start_page and arguments.start_page < 1:
             parser.error("--start-page must be 1 or greater")
         if arguments.end_page and arguments.end_page < 1:
@@ -3931,6 +6186,9 @@ if __name__ == "__main__":
             state_style["page_header_footer_border_colour"] = colour_map[
                 arguments.page_state_border_colour
             ]
+        state_style["show_performer_role_mapping"] = (
+            arguments.show_performer_role_mapping
+        )
 
         legend_overrides = None
         if arguments.legend_overrides_file:
@@ -3966,6 +6224,7 @@ if __name__ == "__main__":
             output_mode=arguments.output_mode,
             result_json_file=arguments.result_json_file,
             result_data=completion_result,
+            project_file=arguments.project,
         )
 
     print(f"Finished! Marked {marked_count} cues.")

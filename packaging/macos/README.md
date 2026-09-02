@@ -78,7 +78,7 @@ The finalized template is never edited in place. The release workflow removes
 only Excel's optional developer-machine absolute-path metadata from its staged
 copy; workbook content and formatting remain unchanged.
 
-Version 1.0.0 targets macOS 12 Monterey or later. The preceding notarized
+Version 2.0.0 targets macOS 12 Monterey or later. The preceding notarized
 release candidate passed physical installation, launch, marked-PDF generation,
 and review-report generation on Intel macOS 12.7.6; Apple Silicon Monterey
 12.x remains unverified. Override the deployment target only for compatibility experiments with

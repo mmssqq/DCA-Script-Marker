@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 import tempfile
@@ -34,6 +35,584 @@ class PageStateStyleCLITests(unittest.TestCase):
             content_view,
         )
         self.assertNotIn('\n        "Full Marking",', content_view)
+
+    def test_macos_app_exposes_performer_role_mapping_toggle(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn(
+            '@State private var showPerformerRoleMapping = false',
+            content_view,
+        )
+        self.assertIn(
+            '"Show DCA Name / Other Script Characters"',
+            content_view,
+        )
+        self.assertIn(
+            'arguments.append("--show-performer-role-mapping")',
+            content_view,
+        )
+
+    def test_macos_app_exposes_floating_role_mapping_inspector(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn('"DCA States Inspector"', content_view)
+        self.assertIn('"--list-role-mappings"', content_view)
+        self.assertIn("newPanel.isFloatingPanel = true", content_view)
+        self.assertIn("newPanel.hidesOnDeactivate = false", content_view)
+        self.assertIn(".canJoinAllSpaces", content_view)
+
+    def test_dca_states_inspector_has_one_click_state_navigation(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn('model.language.label("Previous")', content_view)
+        self.assertIn('model.language.label("Next")', content_view)
+        self.assertIn("selectState(offset: -1)", content_view)
+        self.assertIn("selectState(offset: 1)", content_view)
+        self.assertIn('Text(model.language.label("DCA State"))', content_view)
+        self.assertIn('systemImage: "list.number"', content_view)
+
+    def test_role_mapping_search_covers_every_dca_state(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn(
+            '"Search all states by DCA Name or other character"',
+            content_view,
+        )
+        self.assertIn('"Other Script Characters Played"', content_view)
+        self.assertIn("var resultIndexes: [String: Int]", content_view)
+        self.assertIn('Text(model.language.label("DCA States"))', content_view)
+        self.assertIn("appearance.stateName", content_view)
+        self.assertIn('"Whole-project search', content_view)
+        self.assertIn('"Each matching DCA Name is shown once.', content_view)
+
+    def test_inspector_headers_show_names_and_optional_roles_only(self):
+        content = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertNotIn("Shared Groups", content)
+        self.assertNotIn("共享群组", content)
+        self.assertGreaterEqual(content.count('"DCA Name"'), 4)
+        self.assertEqual(content.count('"Other Script Characters Played"'), 2)
+        self.assertEqual(content.count('"饰演的其他剧本角色"'), 2)
+
+    def test_macos_app_surfaces_workbook_setup_failures(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn(
+            '"Check DCA project setup"',
+            content_view,
+        )
+        self.assertIn('alert.addButton(withTitle: t("Edit DCA Project", "编辑 DCA 项目"))', content_view)
+        self.assertIn("showMarkerFailureAlert(errorMessage)", content_view)
+
+    def test_macos_app_exposes_version_two_project_workflow(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn('Button(action: createNewProject)', content_view)
+        self.assertIn('Button(action: openProject)', content_view)
+        self.assertIn('"Import Excel"', content_view)
+        self.assertIn('"Export Excel"', content_view)
+        self.assertIn('"--import-excel"', content_view)
+        self.assertIn('"--export-excel"', content_view)
+        self.assertIn('"--project", projectPath', content_view)
+        self.assertIn('struct DCAProjectDocument: Codable', project_editor)
+        self.assertIn('struct DCAProjectEditor: View', project_editor)
+        self.assertIn('ScrollView(.horizontal)', project_editor)
+        self.assertIn('stateHeaderCell(language.label("Page Hint")', project_editor)
+        self.assertIn('stateHeaderCell(language.label("Start Line Text")', project_editor)
+        self.assertIn('"DCA \\(dcaIndex + 1)"', project_editor)
+
+    def test_main_page_places_export_on_editor_row_below_file_actions(self):
+        content = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        start = content.index('Text(appLanguage.label("DCA Project"))')
+        end = content.index("\n                FileRow(", start)
+        block = content[start:end]
+        new_button = block.index("Button(action: createNewProject)")
+        open_button = block.index("Button(action: openProject)")
+        import_button = block.index("importExcelProject()")
+        edit_button = block.index("showProjectEditor = true")
+        export_button = block.index("exportProjectExcel()")
+        self.assertLess(new_button, open_button)
+        self.assertLess(open_button, import_button)
+        self.assertLess(import_button, edit_button)
+        self.assertLess(edit_button, export_button)
+        self.assertIn("HStack(spacing: 10)", block)
+        self.assertIn('"Edit Character List and DCA States"', block)
+        self.assertIn('"Main project setup"', block)
+        self.assertIn(".frame(maxWidth: .infinity)", block)
+        self.assertIn(".frame(height: 46)", block)
+        self.assertIn("colors: [.blue, .cyan]", block)
+        self.assertIn("RoundedRectangle(cornerRadius: 12)", block)
+        self.assertGreaterEqual(block.count(".frame(width: 78)"), 4)
+
+    def test_main_page_keeps_each_marking_style_explanation_visible(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        style_start = content_view.index(
+            "HStack(alignment: .top, spacing: 28)"
+        )
+        style_end = content_view.index(
+            "\n            if !message.isEmpty {",
+            style_start,
+        )
+        style_block = content_view[style_start:style_end]
+
+        self.assertIn('Text(appLanguage.label("Choose Marking Style"))', style_block)
+        self.assertIn("ForEach(styles, id: \\.self)", style_block)
+        self.assertIn(".frame(width: 500", style_block)
+        self.assertIn("Text(helpText(for: style))", style_block)
+        self.assertIn("markingStyleColour(for: style)", style_block)
+        self.assertNotIn("Text(helpText(for: selectedStyle))", style_block)
+        self.assertNotIn('Text("Selected:', content_view)
+        self.assertIn('.frame(width: 168, height: 168)', style_block)
+        self.assertLess(
+            style_block.index('"Generate\\nMarked Script"'),
+            style_block.index('appLanguage.label("DCA States")'),
+        )
+        self.assertIn(".padding(.top, 10)", style_block)
+        self.assertIn("minWidth: 980", content_view)
+        self.assertIn("idealWidth: 1040", content_view)
+        self.assertIn("minHeight: 680", content_view)
+        self.assertIn("idealHeight: 740", content_view)
+
+        colour_start = content_view.index(
+            "private func markingStyleColour(for style: String) -> Color"
+        )
+        colour_end = content_view.index(
+            "\n    func chooseFile(allowedTypes:",
+            colour_start,
+        )
+        colour_block = content_view[colour_start:colour_end]
+        self.assertIn('case "Editable Full Marking":\n            return Color(red: 0.58, green: 0.75, blue: 0.88)', colour_block)
+        self.assertIn('case "First Appearance Only":\n            return Color(red: 0.94, green: 0.84, blue: 0.58)', colour_block)
+        self.assertIn('default:\n            return Color(red: 0.90, green: 0.70, blue: 0.75)', colour_block)
+        self.assertIn(
+            '.black.opacity(0.76)',
+            colour_block,
+        )
+        self.assertIn("Color.indigo,", style_block)
+        self.assertIn("RoundedRectangle(cornerRadius: 16)", style_block)
+        self.assertIn(
+            ".shadow(color: .indigo.opacity(0.24), radius: 6, y: 2)",
+            style_block,
+        )
+
+    def test_primary_main_page_labels_are_larger_than_button_text(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn(
+            'Text(appLanguage.label("DCA Project"))\n'
+            '                            .font(.system(size: 16, weight: .bold))',
+            content_view,
+        )
+        self.assertIn(
+            'Text(appLanguage.label("Choose Marking Style"))\n'
+            '                        .font(.system(size: 16, weight: .bold))',
+            content_view,
+        )
+        self.assertIn('title: "Script PDF"', content_view)
+        self.assertIn('title: "Output Folder"', content_view)
+
+        file_row_start = content_view.index("struct FileRow: View")
+        file_row = content_view[file_row_start:]
+        self.assertIn(
+            'Text(language.label(title))\n'
+            '                .font(.system(size: 16, weight: .bold))',
+            file_row,
+        )
+
+    def test_excel_import_automatically_saves_project_beside_workbook(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        import_start = content_view.index(
+            "    private func importExcelProject()"
+        )
+        import_end = content_view.index(
+            "    private func exportProjectExcel()",
+            import_start,
+        )
+        import_block = content_view[import_start:import_end]
+        self.assertIn(
+            "automaticImportedProjectURL(",
+            import_block,
+        )
+        self.assertNotIn("projectSaveURL(", import_block)
+        self.assertIn(
+            'let baseName = excelURL.deletingPathExtension().lastPathComponent',
+            content_view,
+        )
+        self.assertIn(
+            '!FileManager.default.fileExists(atPath: candidate.path)',
+            content_view,
+        )
+
+    def test_internal_project_character_list_is_optional(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        user_guide = (PROJECT_ROOT / "USER_GUIDE.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "Character List is optional.",
+            project_editor,
+        )
+        self.assertNotIn(
+            "is not in Character List.",
+            project_editor,
+        )
+        self.assertIn("Character List is optional:", content_view)
+        self.assertIn("Character List is optional.", user_guide)
+        self.assertIn("Character List 为可选项", user_guide)
+
+    def test_primary_project_add_buttons_have_large_click_targets(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            ".frame(minWidth: 200, minHeight: 34)",
+            project_editor,
+        )
+        for label in (
+            "Add DCA Name",
+            "Add DCA State",
+        ):
+            self.assertIn(
+                f'title: language.label("{label}")',
+                project_editor,
+            )
+        self.assertGreaterEqual(
+            project_editor.count(".controlSize(.large)"),
+            2,
+        )
+
+    def test_project_editor_autosave_does_not_rewrite_active_fields(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        self.assertIn(
+            "saveCurrentProject(capturingInterface: false)",
+            content_view,
+        )
+        self.assertIn(
+            "private func saveCurrentProject(\n"
+            "        capturingInterface: Bool = true\n"
+            "    ) -> Bool",
+            content_view,
+        )
+        self.assertIn(
+            "if capturingInterface {\n"
+            "            captureInterfaceInProject()\n"
+            "        }",
+            content_view,
+        )
+
+    def test_dca_assignment_focus_request_is_consumed_once(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "let focusBinding = _requestedFocus",
+            project_editor,
+        )
+        self.assertIn(
+            "if focusBinding.wrappedValue == focusRequest {\n"
+            "                focusBinding.wrappedValue = nil\n"
+            "            }",
+            project_editor,
+        )
+        self.assertNotIn(
+            "parent.requestedFocus = parent.focus",
+            project_editor,
+        )
+
+    def test_internal_dca_cells_support_tab_navigation(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn("override func insertTab", project_editor)
+        self.assertIn("override func insertBacktab", project_editor)
+        self.assertIn("moveDCAAssignmentFocus", project_editor)
+        self.assertIn("stateIndex * 12 + focus.dcaIndex + offset", project_editor)
+        self.assertIn(
+            'language.label("Delete Row")',
+            project_editor,
+        )
+
+    def test_internal_dca_state_identity_stays_pinned_while_scrolling(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "final class StateTableHorizontalOffsetView",
+            project_editor,
+        )
+        self.assertIn(
+            "observedClipView.bounds.minX",
+            project_editor,
+        )
+        self.assertIn(
+            "StateTableHorizontalOffsetReader(",
+            project_editor,
+        )
+        self.assertGreaterEqual(
+            project_editor.count(".offset(x: frozenStateIdentityOffset)"),
+            2,
+        )
+        self.assertIn(
+            "private var frozenStateIdentityOffset: CGFloat {\n"
+            "        stateTableHorizontalOffset\n"
+            "    }",
+            project_editor,
+        )
+
+    def test_special_multi_column_dca_name_example_is_in_user_guides(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        user_guide = (PROJECT_ROOT / "USER_GUIDE.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "put TOM and ALL THREE in DCA 1",
+            content_view,
+        )
+        self.assertIn(
+            "The printed ALL THREE cue then receives 1/2/3",
+            content_view,
+        )
+        self.assertIn(
+            "Special DCA-cell example",
+            user_guide,
+        )
+        self.assertIn(
+            "特别 DCA 单元格示例",
+            user_guide,
+        )
+        self.assertIn(
+            "| `DCA 3` | `APPLE` + new line + `ALL THREE` |",
+            user_guide,
+        )
+
+    def test_internal_editor_has_no_membership_controls(self):
+        editor = CONTENT_VIEW_FILE.with_name("DCAProjectEditor.swift").read_text(encoding="utf-8")
+        self.assertNotIn("struct DCAProjectGroup", editor)
+        self.assertNotIn("sharedGroupsEditor", editor)
+        self.assertNotIn("Add Shared Group", editor)
+        self.assertNotIn('case groups', editor)
+        self.assertIn("convertLegacyAssignments()", editor)
+        self.assertIn("writeConvertedCopy", editor)
+        self.assertIn("transformBeforeCommit: { $0 }", editor)
+
+    def test_dca_picker_lists_names_then_optional_script_roles(self):
+        editor = CONTENT_VIEW_FILE.with_name("DCAProjectEditor.swift").read_text(encoding="utf-8")
+        start = editor.index('Text(t("Add DCA Names"')
+        picker = editor[start:editor.index("private func addDCAName", start)]
+        self.assertLess(picker.index("ForEach(characterListDCANames,"),
+                        picker.index("ForEach(characterListRoleChoices,"))
+        self.assertNotIn("characterListSharedGroups", picker)
+        self.assertIn("addDCAName(choice.assignmentLabel, to: text)", picker)
+        self.assertIn('"Adds \\(choice.assignmentLabel)"', picker)
+        self.assertIn('"填入 \\(choice.assignmentLabel)"', picker)
+        self.assertIn("choice.dcaName,", picker)
+        self.assertIn("dcaCellContains(", picker)
+
+    def test_internal_dca_state_rows_are_more_compact(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(".frame(width: 48, height: 76)", project_editor)
+        self.assertIn(".frame(width: 140, height: 76)", project_editor)
+        self.assertIn(".frame(width: width, height: 76)", project_editor)
+        self.assertGreaterEqual(project_editor.count("height: 54"), 2)
+
+    def test_dca_picker_selection_recognises_square_bracket_aliases(self):
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "private func dcaAssignmentNameKey(_ value: String)",
+            project_editor,
+        )
+        self.assertIn(
+            "let newKey = dcaAssignmentNameKey(name)",
+            project_editor,
+        )
+        self.assertIn(
+            "let nameKey = dcaAssignmentNameKey(name)",
+            project_editor,
+        )
+        self.assertIn(
+            ".contains { dcaAssignmentNameKey(String($0)) == nameKey }",
+            project_editor,
+        )
+
+    def test_duplicate_dca_assignments_warn_without_blocking_generation(self):
+        content_view = CONTENT_VIEW_FILE.read_text(encoding="utf-8")
+        project_editor = CONTENT_VIEW_FILE.with_name(
+            "DCAProjectEditor.swift"
+        ).read_text(encoding="utf-8")
+        self.assertIn("blockingValidationIssues", project_editor)
+        self.assertIn("advisoryIssues", project_editor)
+        self.assertIn("ignoredAdvisorySignatures", project_editor)
+        self.assertIn('systemName: "xmark.circle.fill"', project_editor)
+        self.assertIn('t("Ignore", "忽略")', project_editor)
+        self.assertIn("confirmProjectAdvisories", content_view)
+        self.assertIn('"Ignore and Continue"', content_view)
+        self.assertIn("ignoredProjectAdvisorySignatures", content_view)
+        self.assertIn("It will not stop generation.", content_view)
+
+    def test_cli_lists_state_role_mappings_for_floating_inspector(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            template_file = temporary_path / "template.xlsx"
+
+            workbook = Workbook()
+            states_sheet = workbook.active
+            states_sheet.title = "DCA States"
+            states_sheet.append([
+                "DCA State",
+                "Start Line Text",
+                "State Start Position",
+                "DCA 1",
+                "DCA 2",
+            ])
+            states_sheet.append([
+                "Scene 1",
+                "START ONE",
+                "Before",
+                "Ben",
+                "Alex",
+            ])
+            states_sheet.append([
+                "Scene 2",
+                "START TWO",
+                "Before",
+                "Alex",
+                "Ben",
+            ])
+            characters = workbook.create_sheet("Character List")
+            characters.append([None, None])
+            characters.append([
+                "DCA Name",
+                "Other Script Characters Played",
+            ])
+            characters.append([
+                "Ben",
+                "Barber\nButcher\nCoach",
+            ])
+            characters.append([
+                "Alex",
+                "",
+            ])
+            workbook.save(template_file)
+            workbook.close()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MARKER_FILE),
+                    "--template",
+                    str(template_file),
+                    "--list-role-mappings",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            states = json.loads(result.stdout)
+            self.assertEqual([state["name"] for state in states], [
+                "Scene 1",
+                "Scene 2",
+            ])
+            self.assertEqual(states[0]["rows"], [
+                {
+                    "dca": "1",
+                    "performer": "Ben",
+                    "roles": ["Barber", "Butcher", "Coach"],
+                },
+                {
+                    "dca": "2",
+                    "performer": "Alex",
+                    "roles": [],
+                },
+            ])
+            self.assertEqual(states[1]["rows"], [
+                {
+                    "dca": "1",
+                    "performer": "Alex",
+                    "roles": [],
+                },
+                {
+                    "dca": "2",
+                    "performer": "Ben",
+                    "roles": ["Barber", "Butcher", "Coach"],
+                },
+            ])
+
+    def test_cli_performer_role_mapping_flag_adds_one_card(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_pdf = temporary_path / "source.pdf"
+            template_file = temporary_path / "template.xlsx"
+            output_folder = temporary_path / "output"
+            output_folder.mkdir()
+
+            source = fitz.open()
+            page = source.new_page(width=595, height=842)
+            page.insert_text((72, 110), "START", fontsize=12)
+            source.save(source_pdf)
+            source.close()
+
+            workbook = Workbook()
+            states_sheet = workbook.active
+            states_sheet.title = "DCA States"
+            states_sheet.append([
+                "DCA State",
+                "Start Line Text",
+                "State Start Position",
+                "DCA 1",
+            ])
+            states_sheet.append([
+                "Scene 1",
+                "START",
+                "Before",
+                "Ben",
+            ])
+            characters = workbook.create_sheet("Character List")
+            characters.append([None, None])
+            characters.append([
+                "DCA Name",
+                "Other Script Characters Played",
+            ])
+            characters.append([
+                "Ben",
+                "Barber\nButcher\nCoach",
+            ])
+            workbook.save(template_file)
+            workbook.close()
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(MARKER_FILE),
+                    "--template",
+                    str(template_file),
+                    "--script",
+                    str(source_pdf),
+                    "--output",
+                    str(output_folder),
+                    "--style",
+                    "Editable Full Marking",
+                    "--show-performer-role-mapping",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            marked_pdf = next(output_folder.glob("*_marked_*.pdf"))
+            document = fitz.open(marked_pdf)
+            cards = [
+                annotation
+                for annotation in document[0].annots() or []
+                if "Performer / Role Mapping"
+                in annotation.info.get("content", "")
+            ]
+            self.assertEqual(len(cards), 1)
+            self.assertIn("DCA 1 | Ben", cards[0].info["content"])
+            document.close()
 
     def test_page_state_display_argument_selects_footer_only(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

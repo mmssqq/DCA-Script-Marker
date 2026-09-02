@@ -18,7 +18,10 @@ dca_script_marker.py
 requirements.txt
 macOS App/DCA Script Marker/DCA Script Marker.xcodeproj/project.pbxproj
 macOS App/DCA Script Marker/DCA Script Marker.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+macOS App/DCA Script Marker/Resources/START HERE - User Guide - 使用手册.pdf
+macOS App/DCA Script Marker/DCA Script Marker/AppLanguage.swift
 macOS App/DCA Script Marker/DCA Script Marker/ContentView.swift
+macOS App/DCA Script Marker/DCA Script Marker/DCAProjectEditor.swift
 macOS App/DCA Script Marker/DCA Script Marker/DCA_Script_MarkerApp.swift
 macOS App/DCA Script Marker/DCA Script Marker/OCRService.swift
 macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/Contents.json
@@ -30,12 +33,17 @@ macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/DCAAppLogo.imagese
 macOS App/DCA Script Marker/DCA Script Marker/Assets.xcassets/DCAAppLogo.imageset/DCAAppLogo@2x.png
 tests/test_canonical_template.py
 tests/test_cli_styles.py
+tests/test_dca_role_picker.py
 tests/test_matching.py
 tests/test_output_replacement.py
 tests/test_pdf_annotations.py
+tests/test_project_files.py
 tests/test_real_script_regression_runner.py
 tests/test_release_packaging.py
+tests/test_retired_assignments.py
+tests/test_role_mapping.py
 tests/test_runtime_cli.py
+tests/test_state_row_selection.py
 tests/real_script_regressions.example.json
 tools/__init__.py
 tools/run_real_script_regressions.py

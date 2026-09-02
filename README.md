@@ -1,20 +1,21 @@
 # DCA Script Marker
 
-DCA Script Marker is a local macOS tool that marks dialogue cues with the
-correct DCA numbers from a scene-by-scene workbook while preserving the script
-PDF layout and creating a review report.
+DCA Script Marker is a local macOS tool for building scene-by-scene DCA states
+and marking dialogue cues with the correct DCA numbers while preserving the
+script PDF layout and creating a review report. Version 2 includes an in-app
+Character List and DCA States editor, plus Excel import and export.
 
 **中文：** DCA Script Marker 是一款为剧场音响人员提供的本地 macOS 工具。它会读取
 按场次编排的 DCA 列表和文字版剧本 PDF，在对白角色旁标注正确的 DCA 编号，保留原
 PDF 版式，并生成供人工复核的报告。
 
-Version 1.0.0 targets macOS 12 Monterey or later as one Universal app for
+Version 2.0.0 targets macOS 12 Monterey or later as one Universal app for
 Apple Silicon and 64-bit Intel Macs. The previous notarized release candidate
 passed installation, launch, marked-PDF generation, and review-report
 generation on Intel macOS 12.7.6. Apple Silicon Monterey 12.x remains
 unverified. Users do not need Python, Homebrew, or Xcode.
 
-**中文：** 1.0.0 版本面向 macOS 12 Monterey 或更高版本，一个通用安装包同时包含
+**中文：** 2.0.0 版本面向 macOS 12 Monterey 或更高版本，一个通用安装包同时包含
 Apple 芯片和 64 位 Intel Mac 版本。此前经过公证的候选版本已在 Intel macOS 12.7.6
 实体 Mac 上通过安装、启动、生成标注 PDF 和复核报告测试；运行 Monterey 12.x 的
 Apple 芯片 Mac 尚未单独验证。使用者无需安装 Python、Homebrew 或 Xcode。
@@ -23,13 +24,16 @@ Apple 芯片 Mac 尚未单独验证。使用者无需安装 Python、Homebrew �
 
 1. Download the `macOS.dmg` from the GitHub Release, open it, and drag
    **DCA Script Marker** into **Applications**.
-2. **Before opening the app, copy the included Excel DCA State template from
-   the DMG into your own project folder. The app cannot create useful markings
-   from the blank template until you complete it.**
-3. In the copied workbook, enter each dialogue character from cell A3 of
-   `Character List`, then enter one state per row from row 5 of `DCA States`.
-4. Save the completed `.xlsx`. In the app, choose that Excel file, the original
-   text-based script PDF, and an output folder.
+2. Choose **New** to create a local `.dcamarker` project, **Open** to continue
+   one, or **Import Excel** to convert an existing DCA workbook.
+3. Choose **Edit Character List and DCA States**. Character List is optional:
+   leave it blank unless you need **Other Script Characters Played** mapping.
+   Enter names directly in each state's DCA 1–12 assignments, then complete
+   its start cue and Page Hint. When mapping is needed, enter one DCA identity
+   per Character List row and put each additional script role on a new line.
+4. Choose the original text-based script PDF and an output folder. The project
+   remembers these paths and the marking settings. Use **Export Excel** whenever
+   a standard workbook copy is needed.
 5. Choose a marking style, select **Generate Marked Script**, and review both
    the marked PDF and the generated review report.
 
@@ -42,11 +46,14 @@ State on the wrong page.
 
 1. 从 GitHub Release 下载 `macOS.dmg`，打开后将 **DCA Script Marker** 拖入
    **Applications（应用程序）**。
-2. **打开软件前，请先把 DMG 内附带的 Excel DCA 状态模板复制到您自己的项目文件夹。
-   空白模板必须填写完成后才能生成有用的标注。**
-3. 在复制出的工作簿中，从 `Character List` 的 A3 开始填写每个说台词的角色，再从
-   `DCA States` 的第 5 行开始每行填写一个 DCA 状态。
-4. 保存完成的 `.xlsx`。在软件中依次选择该 Excel、原始文字版剧本 PDF 和输出文件夹。
+2. 选择 **New** 新建本地 `.dcamarker` 项目，选择 **Open** 继续已有项目，或选择
+   **Import Excel** 转换现有 DCA 工作簿。
+3. 选择 **Edit Character List and DCA States**。Character List 为可选项；如果不需要
+   **Other Script Characters Played** 映射，可以留空，直接填写每个状态的开始提示、
+   Page Hint 和 DCA 1–12 分配。如果需要映射，再在 Character List 中每行填写一个
+   DCA 身份，并将饰演的其他剧本角色分行填写。
+4. 选择原始文字版剧本 PDF 和输出文件夹。项目会记住这些路径及标注设置；需要标准
+   工作簿副本时，可随时选择 **Export Excel**。
 5. 选择标注方式，点击 **Generate Marked Script**，并同时检查标注 PDF 和复核报告。
 
 **重要页码规则：** Excel 的 **Page Hint** 通常填写剧本页面内印刷的页码；如果该页
@@ -89,7 +96,20 @@ be wrong. Open the review report and correct the setup before trying again.
 
 ## Current capabilities / 主要功能
 
+- Local Version 2 project files that remember DCA data, the linked PDF, output
+  folder, and marking settings / 本地 Version 2 项目文件可保存 DCA 数据、关联 PDF、
+  输出文件夹及标注设置
+- In-app Character List and DCA States editor with setup validation, plus Excel
+  import and export / 软件内置 Character List 与 DCA States 编辑器及设置检查，并支持
+  Excel 导入与导出
 - Horizontal and supported legacy vertical DCA workbook formats / 支持横向及旧版纵向 DCA 状态表
+- Optional workbook-wide Performer / Role Mapping: assign one DCA identity to
+  several differently named script roles / 可在整个工作簿中设置“演员 / 角色对应”，
+  让多个不同剧本角色共用同一个 DCA 身份
+- Optional movable mapping card on the first selected page where each DCA State
+  is active, so column-B performer/role mappings can be checked without opening
+  Excel / 可在每个 DCA 状态首次启用的所选页面添加可移动对照卡，无需打开 Excel 即可
+  查看 B 列演员 / 角色映射
 - Editable PDF annotations in every user-facing marking mode / 所有用户可选标注方式均使用可编辑 PDF 标注
 - Editable full marking, first appearance, and DCA State legend modes / 可编辑完整标注、首次出现及 DCA 状态图例模式
 - Independent DCA number and scene/state appearance, with header-only, footer-only, both, or off / 可分别设置 DCA 编号及场次样式，并可选择仅页眉、仅页脚、同时显示或关闭

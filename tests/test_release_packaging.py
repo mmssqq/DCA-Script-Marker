@@ -44,16 +44,16 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertEqual(project.count("MACOSX_DEPLOYMENT_TARGET = 12.0;"), 2)
         self.assertNotIn("MACOSX_DEPLOYMENT_TARGET = 13.0;", project)
-        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 7;"), 2)
-        self.assertEqual(project.count("MARKETING_VERSION = 1.0.0;"), 2)
+        self.assertEqual(project.count("CURRENT_PROJECT_VERSION = 8;"), 2)
+        self.assertEqual(project.count("MARKETING_VERSION = 2.0.0;"), 2)
         self.assertNotIn("path(percentEncoded: false)", content_view)
 
         for build_script in (app_builder, engine_builder):
             self.assertIn('DCA_MINIMUM_MACOS:-12.0', build_script)
 
         for build_script in (app_builder, engine_builder, source_builder):
-            self.assertIn('DCA_BUILD_NUMBER:-7', build_script)
-            self.assertIn('DCA_VERSION:-1.0.0', build_script)
+            self.assertIn('DCA_BUILD_NUMBER:-8', build_script)
+            self.assertIn('DCA_VERSION:-2.0.0', build_script)
         for release_script in (app_builder, source_builder):
             self.assertIn('DCA_RELEASE_CHANNEL:-stable', release_script)
             self.assertIn('DCA_RELEASE_CHANNEL must be stable or beta.', release_script)
@@ -88,6 +88,13 @@ class ReleasePackagingTests(unittest.TestCase):
             / "pdf"
             / "START HERE - User Guide - 使用手册.pdf"
         )
+        bundled_guide_pdf = (
+            PROJECT_ROOT
+            / "macOS App"
+            / "DCA Script Marker"
+            / "Resources"
+            / "START HERE - User Guide - 使用手册.pdf"
+        )
 
         self.assertIn("USER_GUIDE.md", build_script)
         self.assertIn("START HERE - User Guide - 使用手册.pdf", build_script)
@@ -98,20 +105,25 @@ class ReleasePackagingTests(unittest.TestCase):
         )
         self.assertIn("Install and quick start / 安装与快速开始", readme)
         self.assertIn("Safety and limitations / 安全说明与限制", readme)
-        self.assertIn("Version 1.0.0", guide)
+        self.assertIn("Version 2.0.0", guide)
         self.assertIn("Character List", guide)
         self.assertIn("Start Line Text", guide)
         self.assertIn("中文使用手册", guide)
         self.assertIn("故障排查与问题反馈", guide)
         self.assertTrue(guide_pdf.is_file())
+        self.assertTrue(bundled_guide_pdf.is_file())
+        self.assertEqual(
+            guide_pdf.read_bytes(),
+            bundled_guide_pdf.read_bytes(),
+        )
 
         with fitz.open(guide_pdf) as document:
             self.assertGreaterEqual(document.page_count, 2)
             pdf_text = "\n".join(page.get_text() for page in document)
 
-        self.assertIn("Install the app and copy the template", pdf_text)
-        self.assertIn("安装软件并复制模板", pdf_text)
-        self.assertIn("Version 1.0.0", pdf_text)
+        self.assertIn("Install the app and create a project", pdf_text)
+        self.assertIn("安装软件并新建项目", pdf_text)
+        self.assertIn("Version 2.0.0", pdf_text)
 
     def test_zero_mark_and_page_number_safety_copy_is_bundled(self):
         guide_pdf = (
@@ -135,7 +147,7 @@ class ReleasePackagingTests(unittest.TestCase):
 
         self.assertIn("No DCA numbers were added", content_view)
         self.assertIn("未添加任何 DCA 编号", content_view)
-        self.assertIn('withTitle: "Try Another PDF"', content_view)
+        self.assertIn('withTitle: t("Try Another PDF", "选择其他 PDF")', content_view)
         self.assertIn("let generationStyle = selectedStyle", content_view)
         self.assertIn("completionResult.markedCount == 0", content_view)
         self.assertIn(
@@ -185,14 +197,17 @@ class ReleasePackagingTests(unittest.TestCase):
         )
 
         with fitz.open(guide_pdf) as document:
-            self.assertEqual(document.page_count, 6)
+            self.assertGreaterEqual(document.page_count, 8)
             guide_text = "\n".join(page.get_text() for page in document)
         self.assertIn("DCA Script Marker User Guide", guide_text)
         self.assertIn("中文使用手册", guide_text)
+        self.assertIn("Jack [Student]", guide_text)
+        self.assertIn("Jack [Teacher]", guide_text)
         self.assertIn(
-            'Label("User Guide", systemImage: "book.closed")',
+            'appLanguage.label("User Guide")',
             content_view,
         )
+        self.assertIn('systemImage: "book.closed"', content_view)
         self.assertIn(
             'forResource: "START HERE - User Guide - 使用手册"',
             content_view,
@@ -204,7 +219,7 @@ class ReleasePackagingTests(unittest.TestCase):
             project,
         )
         self.assertIn(
-            '../../output/pdf/START HERE - User Guide - 使用手册.pdf',
+            'Resources/START HERE - User Guide - 使用手册.pdf',
             project,
         )
         self.assertIn(
@@ -213,6 +228,11 @@ class ReleasePackagingTests(unittest.TestCase):
         )
         self.assertIn(
             "output/pdf/START HERE - User Guide - 使用手册.pdf",
+            allowlist,
+        )
+        self.assertIn(
+            "macOS App/DCA Script Marker/Resources/"
+            "START HERE - User Guide - 使用手册.pdf",
             allowlist,
         )
 
@@ -286,6 +306,38 @@ class ReleasePackagingTests(unittest.TestCase):
             "app_ui_backup",
         ):
             self.assertNotIn(forbidden, joined)
+
+    def test_source_allowlist_includes_app_sources_and_regression_tests(self):
+        entries = {
+            line.strip()
+            for line in (PACKAGING_ROOT / "source-files.txt").read_text(
+                encoding="utf-8"
+            ).splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+        # Xcode discovers Swift files from this folder automatically, whereas
+        # a release snapshot contains only explicitly allowlisted files.
+        app_source = PROJECT_ROOT / "macOS App/DCA Script Marker/DCA Script Marker"
+        required = {
+            path.relative_to(PROJECT_ROOT).as_posix()
+            for path in (
+                *app_source.rglob("*.swift"),
+                *(PROJECT_ROOT / "tests").glob("test_*.py"),
+            )
+        }
+        # Keep these requirements explicit so the check also detects their
+        # omission when tests run from an already assembled source snapshot.
+        required.update({
+            "macOS App/DCA Script Marker/DCA Script Marker/AppLanguage.swift",
+            "tests/test_dca_role_picker.py",
+            "tests/test_retired_assignments.py",
+            "tests/test_state_row_selection.py",
+        })
+        self.assertFalse(
+            required - entries,
+            "Release source allowlist is missing: "
+            + ", ".join(sorted(required - entries)),
+        )
 
     def test_dependency_source_manifest_is_locked_and_https_only(self):
         manifest = PACKAGING_ROOT / "source-dependencies.tsv"

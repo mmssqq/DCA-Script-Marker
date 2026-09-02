@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import re
+import shutil
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -32,6 +33,13 @@ DEFAULT_OUTPUT = (
     PROJECT_ROOT
     / "output"
     / "pdf"
+    / "START HERE - User Guide - 使用手册.pdf"
+)
+DEFAULT_BUNDLED_OUTPUT = (
+    PROJECT_ROOT
+    / "macOS App"
+    / "DCA Script Marker"
+    / "Resources"
     / "START HERE - User Guide - 使用手册.pdf"
 )
 PAGE_WIDTH, PAGE_HEIGHT = A4
@@ -140,7 +148,7 @@ def build_styles() -> dict[str, ParagraphStyle]:
             parent=base["BodyText"],
             fontName="Helvetica",
             fontSize=8.6,
-            leading=10.8,
+            leading=10.5,
             textColor=colors.HexColor("#18242d"),
             spaceAfter=1.2 * mm,
             splitLongWords=True,
@@ -177,7 +185,7 @@ def build_styles() -> dict[str, ParagraphStyle]:
             parent=base["BodyText"],
             fontName="Helvetica",
             fontSize=8.5,
-            leading=10.6,
+            leading=10.3,
             leftIndent=5 * mm,
             firstLineIndent=-3.5 * mm,
             bulletIndent=0,
@@ -333,7 +341,7 @@ def draw_page_chrome(canvas, document) -> None:
     canvas.setFont("GuideCJK", 7.2)
     canvas.setFillColor(colors.HexColor("#5a6d79"))
     canvas.drawString(18 * mm, 9 * mm, "DCA Script Marker User Guide / 使用手册")
-    canvas.drawRightString(PAGE_WIDTH - 18 * mm, 9 * mm, f"Version 1.0.0  |  {document.page}")
+    canvas.drawRightString(PAGE_WIDTH - 18 * mm, 9 * mm, f"Version 2.0.0  |  {document.page}")
     canvas.restoreState()
 
 
@@ -361,7 +369,7 @@ def render(source: Path, output: Path) -> None:
         bottomMargin=14 * mm,
         title="DCA Script Marker User Guide / 使用手册",
         author="马斯琪 Siqi Ma",
-        subject="Bilingual user guide for DCA Script Marker 1.0.0",
+        subject="Bilingual user guide for DCA Script Marker 2.0.0",
     )
     story = markdown_story(source.read_text(encoding="utf-8"), styles)
     story.insert(2, HRFlowable(
@@ -379,8 +387,12 @@ def main() -> None:
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
-    render(args.source.resolve(), args.output.resolve())
-    print(args.output.resolve())
+    resolved_output = args.output.resolve()
+    render(args.source.resolve(), resolved_output)
+    if resolved_output == DEFAULT_OUTPUT.resolve():
+        DEFAULT_BUNDLED_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(resolved_output, DEFAULT_BUNDLED_OUTPUT)
+    print(resolved_output)
 
 
 if __name__ == "__main__":

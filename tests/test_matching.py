@@ -57,6 +57,24 @@ class SpeakerMatchingTests(unittest.TestCase):
             [],
         )
 
+    def test_spaced_accented_name_in_shared_label_is_recognised(self):
+        characters = {"dolokhov", "helene"}
+
+        self.assertEqual(
+            marker.get_speaker_names(
+                "DOLOKHOV & HÉ LÈ NE",
+                characters,
+            ),
+            ["dolokhov", "helene"],
+        )
+        self.assertEqual(
+            marker.get_speaker_names(
+                "DOLOKHOV & HÉ LÈ NE enter the club",
+                characters,
+            ),
+            [],
+        )
+
     def test_cast_reference_heading_accepts_ae_ligature(self):
         page_text = {
             "blocks": [{
@@ -194,6 +212,48 @@ class SpeakerMatchingTests(unittest.TestCase):
             [],
         )
 
+    def test_spaced_chinese_names_are_valid_speaker_labels(self):
+        characters = {"顾正", "陈姨", "白大爷"}
+
+        for text, expected, remainder in (
+            (
+                "顾  正  我叫顾正，这是我的故事。",
+                "顾正",
+                "我叫顾正,这是我的故事。",
+            ),
+            (
+                "顾  正 老人一定是守旧年迈的吗？",
+                "顾正",
+                "老人一定是守旧年迈的吗?",
+            ),
+            (
+                "陈  姨  （中性）行啦！",
+                "陈姨",
+                "(中性)行啦!",
+            ),
+        ):
+            with self.subTest(text=text):
+                names = marker.get_speaker_names(text, characters)
+                self.assertEqual(names, [expected])
+                self.assertTrue(
+                    marker.looks_like_speaker_label(text, expected)
+                )
+                self.assertEqual(
+                    marker.leading_speaker_remainder(text, expected),
+                    remainder,
+                )
+
+        for narration in (
+            "顾 正在舞台中央停下。",
+            "顾  正在舞台中央停下。",
+            "陈  姨走进小饭馆。",
+            "【顾  正  走到舞台中央】",
+        ):
+            with self.subTest(narration=narration):
+                self.assertFalse(
+                    marker.looks_like_speaker_label(narration, "顾正")
+                )
+
     def test_pdf_radical_long_matches_workbook_character(self):
         characters = {"岑队长"}
         text = "岑队⻓：校准完成，备用通道已经开启。"
@@ -225,7 +285,14 @@ class SpeakerMatchingTests(unittest.TestCase):
         )
 
     def test_chinese_shared_speaker_labels_include_every_known_name(self):
-        characters = {"蓝月儿", "青禾", "紫星河"}
+        characters = {
+            "蓝月儿",
+            "青禾",
+            "紫星河",
+            "亨利",
+            "麻省理工",
+            "斯坦福",
+        }
 
         cases = (
             ("青禾和蓝月儿：蓝光闪烁——", ["青禾", "蓝月儿"]),
@@ -237,6 +304,10 @@ class SpeakerMatchingTests(unittest.TestCase):
             ("青禾与蓝月儿：同步测试。", ["青禾", "蓝月儿"]),
             ("青禾，合唱：同步测试。", ["青禾"]),
             ("青禾，（唱）：同步测试。", ["青禾"]),
+            (
+                "亨利/麻省理工/斯坦福(员工合唱)",
+                ["亨利", "麻省理工", "斯坦福"],
+            ),
         )
 
         for text, expected in cases:
@@ -249,6 +320,7 @@ class SpeakerMatchingTests(unittest.TestCase):
         for text in (
             "紫星河和蓝月儿：（唱）",
             "紫星河、蓝月儿，和青禾 （唱）：",
+            "亨利/麻省理工/斯坦福(员工合唱)",
         ):
             with self.subTest(standalone=text):
                 self.assertTrue(
@@ -261,6 +333,7 @@ class SpeakerMatchingTests(unittest.TestCase):
         for text in (
             "青禾和未知角色：同步测试。",
             "青禾、未知角色：同步测试。",
+            "青禾/未知角色(员工合唱)",
         ):
             with self.subTest(text=text):
                 self.assertEqual(
@@ -542,6 +615,23 @@ class PageHintDetectionTests(unittest.TestCase):
                 page_text=page_text,
             ),
             {"1", "2"},
+        )
+
+    def test_current_page_over_total_footer_is_supported(self):
+        page_text = self.page_text(
+            (744, [("4/47", 276)]),
+            (36, [("Page 12 of 90", 480)]),
+            # A similar complete line in the body is not a page hint.
+            (400, [("8/16", 276)]),
+        )
+
+        self.assertEqual(
+            marker.find_page_hints(
+                self.page,
+                5,
+                page_text=page_text,
+            ),
+            {"4", "5", "12"},
         )
 
     def test_body_number_and_number_inside_header_text_are_rejected(self):

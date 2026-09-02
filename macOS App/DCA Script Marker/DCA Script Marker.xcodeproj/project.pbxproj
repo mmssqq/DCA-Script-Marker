@@ -12,7 +12,7 @@
 
 /* Begin PBXFileReference section */
 		048EF050302C974C007CFEC8 /* DCA Script Marker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DCA Script Marker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		A7B6C5D4302F100000000002 /* START HERE - User Guide - 使用手册.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; name = "START HERE - User Guide - 使用手册.pdf"; path = "../../output/pdf/START HERE - User Guide - 使用手册.pdf"; sourceTree = SOURCE_ROOT; };
+		A7B6C5D4302F100000000002 /* START HERE - User Guide - 使用手册.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; name = "START HERE - User Guide - 使用手册.pdf"; path = "Resources/START HERE - User Guide - 使用手册.pdf"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -259,7 +259,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = YULNYKR45T;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -271,7 +271,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.siqima.DCA-Script-Marker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -291,7 +291,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = YULNYKR45T;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -303,7 +303,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.siqima.DCA-Script-Marker";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;

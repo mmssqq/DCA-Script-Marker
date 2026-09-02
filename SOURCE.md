@@ -3,7 +3,7 @@
 DCA Script Marker is licensed under GNU AGPL version 3 or later.
 
 Every release provides a separate archive named like
-`DCA-Script-Marker-v1.0.0-source.zip` beside the macOS DMG. That archive
+`DCA-Script-Marker-v2.0.0-source.zip` beside the macOS DMG. That archive
 is the authoritative corresponding source for the binary released with it. It
 includes:
 
